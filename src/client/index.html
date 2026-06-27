@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="QuantCEO A股量化交易辅助决策系统，支持RSI精选、信号扫描、回测、持仓管理、智能调仓等功能" />
+  <title>QuantCEO - A股量化交易辅助决策系统</title>
+  <style>
+    .skip-link { position: absolute; top: -100px; left: 8px; z-index: 10000; padding: 8px 16px; background: #f59e0b; color: #000; font-size: 14px; font-weight: 600; border-radius: 0 0 6px 6px; text-decoration: none; -webkit-transition: top 0.15s; transition: top 0.15s; }
+    .skip-link:focus { top: 0; outline: 2px solid #fff; }
+  </style>
+  <script>
+    (function() {
+      var root = document.documentElement
+      var supportsGrid = CSS && CSS.supports && CSS.supports('display', 'grid')
+      var supportsVars = (function() {
+        if (!window.CSS || !CSS.supports) return false
+        return CSS.supports('--test', '0')
+      })()
+      if (!supportsGrid) root.className += ' no-cssgrid'
+      if (!supportsVars) root.className += ' no-cssvars'
+      if (!supportsVars) {
+        var s = document.createElement('style')
+        s.textContent = [
+          '.no-cssvars,.no-cssvars .app,.no-cssvars .sidebar,.no-cssvars .main,.no-cssvars .content,.no-cssvars .header',
+          '{ background:#10121c;color:#e8eaed }',
+          '.no-cssvars .sidebar{ background:#0e101a;border-right:1px solid #23263a }',
+          '.no-cssvars .header{ background:rgba(16,18,28,0.88) }',
+          '.no-cssvars .nav-item{ color:#7c8099 }',
+          '.no-cssvars .nav-item.active{ background:rgba(240,180,41,0.10);color:#f0b429 }',
+          '.no-cssvars input,.no-cssvars select,.no-cssvars textarea{ background:#161a28;color:#e8eaed;border:1px solid #23263a }',
+          '.no-cssvars button{ color:#e8eaed }',
+          '.no-cssvars .stock-card,.no-cssvars .plan-card,.no-cssvars .card,.no-cssvars .strategy-card',
+          '{ background:#161a28;border:1px solid #23263a }',
+          '.no-cssvars a{ color:#f0b429 }',
+          '.no-cssvars .btn-primary{ background:linear-gradient(135deg,#f59e0b,#d97706);color:#000 }',
+        ].join('')
+        document.head.appendChild(s)
+      }
+      if (!supportsGrid) {
+        var g = document.createElement('style')
+        g.textContent = [
+          '.no-cssgrid .plans-grid,.no-cssgrid .stock-grid,.no-cssgrid .indicators-grid,',
+          '.no-cssgrid .metrics-grid,.no-cssgrid .param-grid,.no-cssgrid .pos-metrics,',
+          '.no-cssgrid .analysis-grid,.no-cssgrid .picks-grid,.no-cssgrid .optimizer-grid,',
+          '.no-cssgrid .discovery-grid,.no-cssgrid .referral-stats',
+          '{ display:flex !important;flex-wrap:wrap !important;gap:12px !important }',
+          '.no-cssgrid .plans-grid > *,.no-cssgrid .stock-grid > *,',
+          '.no-cssgrid .indicators-grid > *,.no-cssgrid .metrics-grid > *,',
+          '.no-cssgrid .param-grid > *,.no-cssgrid .pos-metrics > *,',
+          '.no-cssgrid .analysis-grid > *,.no-cssgrid .picks-grid > *,',
+          '.no-cssgrid .optimizer-grid > *,.no-cssgrid .discovery-grid > *',
+          '{ flex:1 1 100% !important;min-width:0 !important }',
+          '.no-cssgrid .pos-metrics > *{ flex:1 1 45% !important }',
+          '.no-cssgrid .plans-grid > *{ flex:1 1 30% !important }',
+          '.no-cssgrid .stock-grid > *{ flex:1 1 45% !important;max-width:300px }',
+          '.no-cssgrid .indicators-grid > *{ flex:1 1 45% !important }',
+          '.no-cssgrid .analysis-grid > *{ flex:1 1 100% !important }',
+          '.no-cssgrid .market-hero{ display:flex !important;flex-wrap:wrap !important }',
+          '.no-cssgrid .market-hero > *{ flex:1 1 45% !important }',
+        ].join('')
+        document.head.appendChild(g)
+      }
+    })()
+  </script>
+  <script type="module" crossorigin src="/assets/index-D3qCQdd_.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-oJsioIKt.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-yHTsomfc.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">跳到主要内容</a>
+  <div id="app"></div>
+  <noscript>您的浏览器不支持 JavaScript，请启用后访问。</noscript>
+</body>
+</html>

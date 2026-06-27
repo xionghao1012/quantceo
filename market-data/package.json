@@ -1,0 +1,26 @@
+{
+  "name": "market-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Market data microservice — K-lines, quotes, stock list, caching",
+  "scripts": {
+    "dev": "tsx watch src/server/index.ts",
+    "build": "npx tsc",
+    "start": "node dist/server/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "drizzle-orm": "^0.36.0",
+    "express": "^4.21.0",
+    "ioredis": "^5.11.1",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

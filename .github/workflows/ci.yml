@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  # =============== quant-trading ===============
+  quant-trading:
+    name: quant-trading (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./quant-trading
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - run: npm ci
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npx vitest run --reporter=dot
+
+  # =============== quant-ai ===============
+  quant-ai:
+    name: quant-ai (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./quant-ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - run: npm ci
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+  # =============== market-data ===============
+  market-data:
+    name: market-data (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./market-data
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - run: npm ci
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+  # =============== scan-engine ===============
+  scan-engine:
+    name: scan-engine (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./scan-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - name: Type Check
+        run: npx tsc --noEmit
+
+  # =============== scheduler ===============
+  scheduler:
+    name: scheduler (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./scheduler
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - name: Type Check
+        run: npx tsc --noEmit
+
+  # =============== quant-sso ===============
+  quant-sso:
+    name: quant-sso (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./quant-sso
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - run: npm ci
+
+      - name: Type Check
+        run: npx tsc --noEmit
