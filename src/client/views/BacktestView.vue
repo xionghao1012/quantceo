@@ -78,7 +78,6 @@ async function applyOptimizedParams(r: any) {
         { type: 'cross', action: 'SELL', conditions: [{ indicator: shortInd, operator: 'cross_below', value: longInd }] },
       ]
     } else if (optimizeTemplate.value === 'rsi') {
-      const period = r.params.rsi || r.params.rsi_period
       rules = [
         { type: 'threshold', action: 'BUY', conditions: [{ indicator: 'rsi', operator: '<', value: 30 }] },
         { type: 'threshold', action: 'SELL', conditions: [{ indicator: 'rsi', operator: '>', value: 70 }] },
@@ -96,8 +95,9 @@ async function applyOptimizedParams(r: any) {
       }),
     })
     if (!res.ok) throw new Error(`请求失败 (${res.status})`)
-    result.value = await res.json()
-    result.value.strategyName = templateName
+    const data: BacktestResult = await res.json()
+    data.strategyName = templateName
+    result.value = data
   } catch (e: any) { error.value = e.message }
   finally { loading.value = false }
 }
@@ -207,7 +207,7 @@ async function downloadPDF() {
       body: JSON.stringify({
         result: result.value,
         code: code.value,
-        strategyName: result.value.strategyName || strategies.value.find(s => s.id === strategyId.value)?.name || '策略',
+        strategyName: result.value?.strategyName || strategies.value.find(s => s.id === strategyId.value)?.name || '策略',
         startDate: startDate.value,
         endDate: endDate.value,
       }),
@@ -427,12 +427,6 @@ async function compareSelected() {
 
 function fmtDate(d: string) {
   return d ? d.slice(0, 10) : ''
-}
-
-function initHistory() {
-  if (activeTab.value === 'history' && !historyLoading.value && historyList.value.length === 0) {
-    loadHistory()
-  }
 }
 
 const equityOption = computed(() => {

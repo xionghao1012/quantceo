@@ -35,19 +35,19 @@ const ELITE_SIZE = 5
 const MUTATION_RATE = 0.15
 const CROSSOVER_RATE = 0.7
 
-function randomInRange(min: number, max: number): number {
+export function randomInRange(min: number, max: number): number {
   return Math.random() * (max - min) + min
 }
 
-function roundToStep(value: number, step: number): number {
+export function roundToStep(value: number, step: number): number {
   return Math.round(value / step) * step
 }
 
-function clamp(value: number, min: number, max: number): number {
+export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
-function createChromosome(ranges: OptimizeParamRange[]): Record<string, number> {
+export function createChromosome(ranges: OptimizeParamRange[]): Record<string, number> {
   const genes: Record<string, number> = {}
   for (const range of ranges) {
     const value = randomInRange(range.min, range.max)
@@ -56,7 +56,7 @@ function createChromosome(ranges: OptimizeParamRange[]): Record<string, number> 
   return genes
 }
 
-function createPopulation(ranges: OptimizeParamRange[], size: number): Record<string, number>[] {
+export function createPopulation(ranges: OptimizeParamRange[], size: number): Record<string, number>[] {
   const population: Record<string, number>[] = []
   for (const range of ranges) {
     if (range.default !== undefined) {
@@ -69,7 +69,7 @@ function createPopulation(ranges: OptimizeParamRange[], size: number): Record<st
   return population
 }
 
-function crossover(
+export function crossover(
   parent1: Record<string, number>,
   parent2: Record<string, number>,
 ): Record<string, number> {
@@ -85,7 +85,7 @@ function crossover(
   return child
 }
 
-function mutate(genes: Record<string, number>, ranges: OptimizeParamRange[]): Record<string, number> {
+export function mutate(genes: Record<string, number>, ranges: OptimizeParamRange[]): Record<string, number> {
   const mutated = { ...genes }
   for (const range of ranges) {
     if (Math.random() < MUTATION_RATE) {
@@ -98,7 +98,7 @@ function mutate(genes: Record<string, number>, ranges: OptimizeParamRange[]): Re
   return mutated
 }
 
-function tournamentSelection(
+export function tournamentSelection(
   population: { genes: Record<string, number>; fitness: number }[],
   tournamentSize = 3,
 ): Record<string, number> {
@@ -113,7 +113,7 @@ function tournamentSelection(
   return best!.genes
 }
 
-function backtest(
+export function backtest(
   klines: KLine[],
   strategyType: string,
   params: Record<string, number>,
@@ -263,7 +263,7 @@ function backtest(
   }
 }
 
-function calcRSIWithPeriod(klines: KLine[], period: number): number[] {
+export function calcRSIWithPeriod(klines: KLine[], period: number): number[] {
   const closes = klines.map(k => k.close)
   const rsi: number[] = new Array(closes.length).fill(NaN)
   if (closes.length < period + 1) return rsi
@@ -288,7 +288,7 @@ function calcRSIWithPeriod(klines: KLine[], period: number): number[] {
   return rsi
 }
 
-function calcMACDWithPeriods(
+export function calcMACDWithPeriods(
   klines: KLine[],
   fastPeriod: number,
   slowPeriod: number,
@@ -315,7 +315,7 @@ function calcMACDWithPeriods(
   return { macd, signal: signalFilled, histogram }
 }
 
-function calcEMA(data: number[], period: number): number[] {
+export function calcEMA(data: number[], period: number): number[] {
   const ema: number[] = new Array(data.length).fill(NaN)
   if (data.length < period) return ema
   const multiplier = 2 / (period + 1)
@@ -328,7 +328,7 @@ function calcEMA(data: number[], period: number): number[] {
   return ema
 }
 
-function calcMAWithPeriod(klines: KLine[], period: number): number[] {
+export function calcMAWithPeriod(klines: KLine[], period: number): number[] {
   const closes = klines.map(k => k.close)
   const ma: number[] = new Array(closes.length).fill(NaN)
   if (closes.length < period) return ma
@@ -342,7 +342,7 @@ function calcMAWithPeriod(klines: KLine[], period: number): number[] {
   return ma
 }
 
-function fitnessFunction(metrics: BacktestMetrics): number {
+export function fitnessFunction(metrics: BacktestMetrics): number {
   const sharpeWeight = 2.0
   const returnWeight = 1.5
   const drawdownPenalty = 3.0

@@ -1,16 +1,16 @@
 import { Router } from 'express'
-import { eq, sql, desc } from 'drizzle-orm'
+import { eq, sql, desc, inArray } from 'drizzle-orm'
 import crypto from 'crypto'
 import { db } from '../db/db.js'
-import { strategies, backtests, stocks, userStrategies, strategyBacktestRuns } from '../db/schema.js'
-import { getOrFetchKlines } from '../data/cache.js'
+import { strategies, backtests, userStrategies, strategyBacktestRuns } from '../db/schema.js'
+import { getKlinesForBacktest } from '../data/cache.js'
 import { runBacktest } from '../backtest/index.js'
 import { runStrategyBacktestAllPeriods, selectBestStrategy } from '../services/backtestStrategyService.js'
-import type { BacktestResult } from '../../shared/types.js'
+
 
 const router = Router()
 
-function withCache(res: import('express').Response, data: unknown, maxAge = 60): boolean {
+export function withCache(res: import('express').Response, data: unknown, maxAge = 60): boolean {
   const body = JSON.stringify(data)
   const etag = crypto.createHash('md5').update(body).digest('hex')
   if (res.req.headers['if-none-match'] === etag) {
@@ -23,7 +23,7 @@ function withCache(res: import('express').Response, data: unknown, maxAge = 60):
 }
 
 router.post('/', async (req, res) => {
-  const { code, strategyId, userStrategyId, startDate, endDate, initialCapital, custom, rules: directRules, strategyName: directName } = req.body as {
+  const { code, strategyId, userStrategyId, startDate, endDate, initialCapital, custom, rules: directRules, } = req.body as {
     code?: string
     strategyId?: number
     userStrategyId?: number
@@ -32,29 +32,24 @@ router.post('/', async (req, res) => {
     initialCapital?: number
     custom?: boolean
     rules?: any[]
-    strategyName?: string
   }
-  const resultCache = await getOrFetchKlines(code!)
+  const resultCache = await getKlinesForBacktest(code!)
   if (resultCache.klines.length === 0) return res.status(404).json({ error: 'No data' })
   const klineData = resultCache.klines
 
   let rules: any[]
-  let strategyName = ''
 
   if (directRules) {
     rules = directRules
-    strategyName = directName || '自定义参数'
   } else if (custom && userStrategyId) {
     const rows = await db.select().from(userStrategies).where(eq(userStrategies.id, userStrategyId)).limit(1)
     if (!rows[0]) return res.status(404).json({ error: '自定义策略不存在' })
     const config = typeof rows[0].config === 'string' ? JSON.parse(rows[0].config) : rows[0].config
     rules = config.rules || []
-    strategyName = rows[0].name
   } else {
     const rows = await db.select().from(strategies).where(eq(strategies.id, strategyId!)).limit(1)
     if (!rows[0]) return res.status(404).json({ error: 'Strategy not found' })
     rules = (rows[0].config as any).rules as any[]
-    strategyName = rows[0].name
   }
 
   const result = runBacktest(klineData, { code: code!, strategyId: String(strategyId || userStrategyId), startDate: startDate!, endDate: endDate!, initialCapital: initialCapital! }, rules)
@@ -67,7 +62,8 @@ router.post('/', async (req, res) => {
     })
   }
 
-  res.json(result)
+  // adjusted=false 表示该股前复权不可用（接口失败或出现负价），结果是基于不复权数据
+  res.json({ ...result, adjusted: resultCache.adjusted })
 })
 
 router.get('/', async (_req, res) => {
@@ -87,7 +83,7 @@ router.get('/compare', async (req, res) => {
   if (!ids) return res.status(400).json({ error: 'Missing ids' })
   const idList = ids.split(',').map(Number).filter(Boolean)
   if (idList.length < 2) return res.status(400).json({ error: 'Need at least 2 IDs' })
-  const rows = await db.select().from(backtests).where(sql`${backtests.id} = ANY(${idList})`)
+  const rows = await db.select().from(backtests).where(inArray(backtests.id, idList))
   const parsed = rows.map((r: any) => ({ ...r, result: typeof r.result === 'string' ? JSON.parse(r.result) : r.result }))
   if (withCache(res, parsed, 60)) return
   res.json(parsed)
@@ -318,7 +314,7 @@ router.post('/strategies/run', async (req, res) => {
   }
 })
 
-async function getEarliestDate(): Promise<string> {
+export async function getEarliestDate(): Promise<string> {
   const { rows } = await db.execute(sql`
     SELECT MIN(metric_date) AS d FROM daily_metrics
   `)
@@ -330,11 +326,27 @@ router.post('/pdf', async (_req, res) => {
 })
 
 router.post('/optimize', async (_req, res) => {
-  res.status(501).json({ error: '参数优化功能已迁移至 /api/strategy/optimize' })
+  res.status(501).json({
+    error: '参数优化功能已迁移至 /api/strategy/optimize',
+    migrated: true,
+    alternative: {
+      method: 'POST',
+      path: '/api/strategy/optimize',
+      note: '需 Pro 计划。参数: strategyType, symbol, startDate, endDate, paramRanges, populationSize, generations',
+    },
+  })
 })
 
 router.post('/walkforward', async (_req, res) => {
-  res.status(501).json({ error: '滚动优化功能尚未实现' })
+  res.status(501).json({
+    error: '滚动优化功能已迁移至 /api/strategy/optimize/walk-forward',
+    migrated: true,
+    alternative: {
+      method: 'POST',
+      path: '/api/strategy/optimize/walk-forward',
+      note: '需 Pro 计划。参数: strategyType, symbol, startDate, endDate, windowSize, stepSize, params',
+    },
+  })
 })
 
 router.post('/portfolio', async (req, res) => {
@@ -342,7 +354,7 @@ router.post('/portfolio', async (req, res) => {
   if (!code || !startDate || !endDate) {
     return res.status(400).json({ error: '缺少必要参数' })
   }
-  const resultCache = await getOrFetchKlines(code)
+  const resultCache = await getKlinesForBacktest(code)
   if (resultCache.klines.length === 0) return res.status(404).json({ error: 'No data' })
   const result = runBacktest(JSON.parse(JSON.stringify(resultCache.klines)), {
     code, strategyId: 'buy_hold', startDate, endDate, initialCapital: 100000,
@@ -355,7 +367,7 @@ router.post('/portfolio-enhanced', async (req, res) => {
   if (!code || !startDate || !endDate) {
     return res.status(400).json({ error: '缺少必要参数' })
   }
-  const resultCache = await getOrFetchKlines(code)
+  const resultCache = await getKlinesForBacktest(code)
   if (resultCache.klines.length === 0) return res.status(404).json({ error: 'No data' })
   const result = runBacktest(JSON.parse(JSON.stringify(resultCache.klines)), {
     code, strategyId: 'rsi', startDate, endDate, initialCapital: 100000,

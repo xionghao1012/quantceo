@@ -18,15 +18,27 @@ router.beforeEach(async (to) => {
   if (!to.meta.public && !auth.isLoggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.requirePlan && !auth.user) {
-    try { await auth.fetchUser() } catch {}
-  }
   if (to.meta.requirePlan) {
+    if (!auth.user) {
+      try { await auth.fetchUser() } catch {}
+    }
     const plan = to.meta.requirePlan as string
-    const role = auth.user?.role || 'free'
+    let role = auth.user?.role || 'free'
+
+    // Fallback: if auth role is too low, check subscription API
     const planOrder = ['free', 'pro', 'premium']
     if (!planOrder.includes(role) || planOrder.indexOf(role) < planOrder.indexOf(plan)) {
-      return { name: 'upgrade', query: { reason: 'plan_required' } }
+      try {
+        const res = await fetch('/api/subscription/me', { headers: auth.authHeaders() })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.plan) role = data.plan
+        }
+      } catch {}
+    }
+
+    if (!planOrder.includes(role) || planOrder.indexOf(role) < planOrder.indexOf(plan)) {
+      return { name: 'pricing', query: { reason: 'plan_required' } }
     }
   }
 })

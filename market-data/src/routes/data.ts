@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { getKlines, getKlinesBulk, getQuotes, getStockList, getMinuteKlines, refreshKline } from '../kline.js'
+import { db, stocks } from '../db.js'
+import { eq } from 'drizzle-orm'
 
 const router = Router()
 
@@ -66,6 +68,23 @@ router.get('/stocks', async (_req, res) => {
   try {
     const data = await getStockList()
     res.json({ count: data.length, stocks: data })
+  } catch (e: any) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+router.post('/klines/refresh-all', async (req, res) => {
+  try {
+    const limit = Math.min(500, req.body.limit || 100)
+    const allStocks = await db.select({ code: stocks.code }).from(stocks).where(eq(stocks.status, 'active')).limit(limit)
+    let refreshed = 0
+    for (const s of allStocks) {
+      try {
+        const result = await refreshKline(s.code)
+        if (result.source === 'api') refreshed++
+      } catch {}
+    }
+    res.json({ total: allStocks.length, refreshed })
   } catch (e: any) {
     res.status(500).json({ error: e.message })
   }

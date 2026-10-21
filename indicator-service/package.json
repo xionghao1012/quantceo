@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Technical indicator calculation microservice — MA, MACD, RSI, Bollinger",
+  "description": "Technical indicator calculation microservice \u2014 MA, MACD, RSI, Bollinger",
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
     "build": "npx tsc",
-    "start": "node dist/server/index.js"
+    "start": "node dist/server/index.js",
+    "typecheck": "npx tsc --noEmit"
   },
   "dependencies": {
     "cors": "^2.8.6",

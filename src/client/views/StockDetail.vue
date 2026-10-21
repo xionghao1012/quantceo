@@ -7,6 +7,7 @@ import { useWatchlistStore } from '../stores/watchlist'
 import VChart from 'vue-echarts'
 import '../echarts-setup.js'
 import TermTip from '../components/TermTip.vue'
+import QuickAlertModal from '../components/QuickAlertModal.vue'
 
 const props = defineProps<{ code: string }>()
 const route = useRoute()
@@ -27,6 +28,40 @@ const showNews = ref(false)
 const newsSentiment = ref<any>(null)
 const newsLoading = ref(false)
 const newsError = ref('')
+
+const flowHistory = ref<any[]>([])
+const flowTimeseries = ref<any[]>([])
+const flowLoading = ref(false)
+const flowError = ref('')
+const flowDays = ref<'5' | '20'>('20')
+const quickAlertStock = ref<{ code: string; name: string } | null>(null)
+
+const stockName = computed(() =>
+  fundamental.value?.name || store.stockName(props.code) || props.code
+)
+
+async function fetchFlowData(code: string) {
+  flowLoading.value = true
+  flowError.value = ''
+  try {
+    const [histRes, tsRes] = await Promise.all([
+      fetch(`/api/moneyflow/stock/${code}/history?days=${flowDays.value}`),
+      fetch(`/api/moneyflow/stock/${code}/timeseries`),
+    ])
+    if (histRes.ok) {
+      const d = await histRes.json()
+      flowHistory.value = d.data || []
+    }
+    if (tsRes.ok) {
+      const d = await tsRes.json()
+      flowTimeseries.value = d.data || []
+    }
+  } catch (e: any) {
+    flowError.value = e.message
+  } finally {
+    flowLoading.value = false
+  }
+}
 
 const stockCode = computed(() => props.code || route.params.code as string)
 
@@ -116,10 +151,11 @@ onMounted(async () => {
       const res = await fetch(`/api/stocks?q=${code}&limit=1`)
       if (res.ok) {
         const list = await res.json()
-        if (list.length > 0) store.stockByCode = { ...store.stockByCode, [code]: list[0] }
+        if (list.length > 0) store.stockByCode.value = { ...store.stockByCode.value, [code]: list[0] }
       }
     } catch {}
   }
+  fetchFlowData(code)
 })
 
 watch(() => props.code || route.params.code, (newCode) => {
@@ -135,6 +171,11 @@ watch(freq, () => {
   if (code && freq.value !== 'day') {
     fetchMinuteData(code, freq.value)
   }
+})
+
+watch(flowDays, () => {
+  const code = props.code || route.params.code as string
+  if (code) fetchFlowData(code)
 })
 
 async function fetchMinuteData(code: string, period: string) {
@@ -207,6 +248,13 @@ function fmtPe(v?: number) {
   if (v == null) return '--'
   if (v <= 0) return '亏损'
   return v.toFixed(2)
+}
+
+function fmtInflow(v: number) {
+  if (isNaN(v) || v == null) return '--'
+  if (Math.abs(v) >= 1e8) return (v / 1e8).toFixed(2) + '亿'
+  if (Math.abs(v) >= 1e4) return (v / 1e4).toFixed(0) + '万'
+  return (v >= 0 ? '+' : '') + v.toFixed(0)
 }
 
 function cv(name: string) {
@@ -302,6 +350,68 @@ const option = computed(() => {
       },
     ].filter(Boolean),
   }
+})
+
+const flowOption = computed(() => {
+  const c = chartColors.value
+  const ts = flowTimeseries.value
+  const hist = flowHistory.value
+
+  const timeseriesChart = {
+    animation: false,
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: c.tooltipBg,
+      borderColor: c.border,
+      textStyle: { color: c.textPrimary, fontSize: 11 },
+      formatter: (params: any[]) => {
+        let s = params[0].axisValue + '<br/>'
+        params.forEach((p: any) => {
+          const v = p.value >= 0 ? '+' + p.value : String(p.value)
+          s += `<span style="color:${p.color}">●</span> ${p.seriesName}: ${v}<br/>`
+        })
+        return s
+      },
+    },
+    legend: { data: ['超大单买入', '超大单卖出', '大单买入', '大单卖出'], bottom: 0, textStyle: { color: c.textTertiary, fontSize: 10 } },
+    grid: { left: 56, right: 16, top: 10, bottom: 36, height: '55%' },
+    xAxis: [{ type: 'category', data: ts.map(d => new Date(d.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })), axisLabel: { show: false } }],
+    yAxis: [{ type: 'value', scale: true, splitLine: { lineStyle: { color: c.border } }, axisLabel: { color: c.textTertiary, fontSize: 10 } }],
+    series: [
+      { name: '超大单买入', type: 'bar', stack: 'superlarge', data: ts.map(d => d.netInflowSuperLarge > 0 ? d.netInflowSuperLarge : 0), itemStyle: { color: c.up }, barWidth: 6 },
+      { name: '超大单卖出', type: 'bar', stack: 'superlarge', data: ts.map(d => d.netInflowSuperLarge < 0 ? Math.abs(d.netInflowSuperLarge) : 0), itemStyle: { color: c.down }, barWidth: 6 },
+      { name: '大单买入', type: 'bar', stack: 'large', data: ts.map(d => d.netInflowLarge > 0 ? d.netInflowLarge : 0), itemStyle: { color: c.upDim }, barWidth: 6 },
+      { name: '大单卖出', type: 'bar', stack: 'large', data: ts.map(d => d.netInflowLarge < 0 ? Math.abs(d.netInflowLarge) : 0), itemStyle: { color: c.downDim }, barWidth: 6 },
+    ],
+  }
+
+  const historyChart = {
+    animation: false,
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: c.tooltipBg,
+      borderColor: c.border,
+      textStyle: { color: c.textPrimary, fontSize: 11 },
+    },
+    legend: { data: ['主力净流入'], bottom: 0, textStyle: { color: c.textTertiary, fontSize: 10 } },
+    grid: { left: 56, right: 16, top: 10, bottom: 36, height: '55%' },
+    xAxis: [{ type: 'category', data: hist.map(d => String(d.date).slice(5)), axisLabel: { color: c.textTertiary, fontSize: 10, rotate: 30 } }],
+    yAxis: [{ type: 'value', scale: true, splitLine: { lineStyle: { color: c.border } }, axisLabel: { color: c.textTertiary, fontSize: 10, formatter: (v: number) => v >= 1e8 ? (v / 1e8).toFixed(1) + '亿' : (v / 1e4).toFixed(0) + '万' } }],
+    series: [
+      {
+        name: '主力净流入',
+        type: 'line',
+        data: hist.map(d => ({ value: d.netInflowMain, itemStyle: { color: d.netInflowMain >= 0 ? c.up : c.down } })),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { width: 2, color: c.brand },
+        areaStyle: { color: c.brand, opacity: 0.1 },
+      },
+    ],
+  }
+
+  return { timeseriesChart, historyChart }
 })
 </script>
 
@@ -429,11 +539,62 @@ const option = computed(() => {
           <div v-else-if="!newsLoading" class="news-hint">点击"AI 分析"查看新闻情绪</div>
         </div>
       </div>
+
+      <div class="card flow-section">
+        <div class="flow-header">
+          <span class="flow-title">💰 资金流向</span>
+          <div class="flow-tabs">
+            <button :class="{ active: flowDays === '5' }" @click="flowDays = '5'">5日</button>
+            <button :class="{ active: flowDays === '20' }" @click="flowDays = '20'">20日</button>
+          </div>
+          <button v-if="auth.isLoggedIn && stockName" class="flow-alert-btn" @click="quickAlertStock = { code, name: stockName }">
+            ⚡ 设置告警
+          </button>
+        </div>
+        <div v-if="flowLoading" class="flow-loading">加载中...</div>
+        <div v-else-if="flowError" class="flow-error">{{ flowError }}</div>
+        <template v-else>
+          <div class="flow-chart-wrap">
+            <div class="flow-chart-label">分时资金流</div>
+            <VChart v-if="flowTimeseries.length" :option="flowOption.timeseriesChart" style="height: 200px" autoresize />
+            <div v-else class="flow-empty">暂无分时数据</div>
+          </div>
+          <div class="flow-chart-wrap">
+            <div class="flow-chart-label">{{ flowDays }}日主力净流入趋势</div>
+            <VChart v-if="flowHistory.length" :option="flowOption.historyChart" style="height: 200px" autoresize />
+            <div v-else class="flow-empty">暂无历史数据</div>
+          </div>
+          <div v-if="flowHistory.length" class="flow-summary">
+            <div class="flow-stat">
+              <span class="flow-stat-label">5日主力净流入</span>
+              <span class="flow-stat-value" :class="flowHistory.slice(-5).reduce((s, d) => s + d.netInflowMain, 0) >= 0 ? 'up-text' : 'down-text'">
+                {{ fmtInflow(flowHistory.slice(-5).reduce((s, d) => s + d.netInflowMain, 0)) }}
+              </span>
+            </div>
+            <div class="flow-stat">
+              <span class="flow-stat-label">{{ flowDays }}日主力净流入</span>
+              <span class="flow-stat-value" :class="flowHistory.reduce((s, d) => s + d.netInflowMain, 0) >= 0 ? 'up-text' : 'down-text'">
+                {{ fmtInflow(flowHistory.reduce((s, d) => s + d.netInflowMain, 0)) }}
+              </span>
+            </div>
+            <div class="flow-stat">
+              <span class="flow-stat-label">平均每日净流入</span>
+              <span class="flow-stat-value">{{ fmtInflow(flowHistory.reduce((s, d) => s + d.netInflowMain, 0) / flowHistory.length) }}</span>
+            </div>
+          </div>
+        </template>
+      </div>
     </template>
 
     <div v-else class="empty-state">
       <span>请在行情看板中选择一只股票</span>
     </div>
+
+    <QuickAlertModal
+      v-if="quickAlertStock"
+      :stock="quickAlertStock"
+      @close="quickAlertStock = null"
+    />
   </div>
 </template>
 
@@ -536,7 +697,7 @@ const option = computed(() => {
   width: 32px; height: 32px;
   border: 3px solid var(--border);
   border-top-color: var(--brand);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -612,7 +773,7 @@ const option = computed(() => {
   .funda-item { flex: 0 0 25%; box-sizing: border-box; padding: 8px 4px; border-bottom: 1px solid var(--border); }
   .funda-item:nth-child(4) { border-right: none; }
   .funda-item:nth-child(n+5) { border-bottom: none; }
-  .funda-label { font-size: 9px; }
+  .funda-label { font-size: 10px; }
   .funda-value { font-size: 11px; }
   .chart-card { padding: 8px; }
   .chart-card > :deep(*) { height: 380px !important; }
@@ -631,7 +792,7 @@ const option = computed(() => {
   font-size: 12px;
   font-weight: 700;
   padding: 2px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .score-positive { background: rgba(34,197,94,0.15); color: #22c55e; }
 .score-negative { background: rgba(239,68,68,0.15); color: #ef4444; }
@@ -641,7 +802,7 @@ const option = computed(() => {
 .btn-news {
   padding: 6px 14px;
   border: 1px solid var(--brand, #f59e0b);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(245,158,11,0.1);
   color: var(--brand, #f59e0b);
   font-size: 12px;
@@ -659,7 +820,7 @@ const option = computed(() => {
   color: var(--text-secondary, #aaa);
   padding: 10px 12px;
   background: var(--bg, #0d0d0d);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   margin-bottom: 12px;
   line-height: 1.5;
 }
@@ -667,17 +828,17 @@ const option = computed(() => {
 .news-item {
   padding: 8px 10px;
   background: var(--bg, #0d0d0d);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.1s;
 }
 .news-item:hover { background: rgba(255,255,255,0.05); }
 .news-item-header { display: flex; gap: 8px; font-size: 10px; color: var(--text-tertiary, #888); margin-bottom: 3px; align-items: center; }
 .news-type {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   padding: 0 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   line-height: 16px;
 }
 .type-news { background: rgba(59,130,246,0.15); color: #3b82f6; }
@@ -686,4 +847,61 @@ const option = computed(() => {
 .type-weibo { background: rgba(236,72,153,0.15); color: #ec4899; }
 .news-source { font-weight: 600; }
 .news-item-title { font-size: 12px; color: var(--text-primary, #fff); line-height: 1.4; }
+
+.flow-section { padding: 14px 16px; }
+.flow-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.flow-title { font-size: 14px; font-weight: 600; flex: 1; }
+.flow-tabs { display: flex; gap: 4px; }
+.flow-tabs button {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 11px;
+}
+.flow-tabs button.active {
+  background: var(--brand-gradient);
+  color: #0b0d14;
+  border-color: var(--brand);
+  font-weight: 600;
+}
+
+.flow-alert-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--brand);
+  background: var(--brand-glow);
+  color: var(--brand);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.15s;
+  margin-left: auto;
+}
+.flow-alert-btn:hover { background: var(--brand); color: #0b0d14; }
+
+.flow-loading { text-align: center; padding: 20px; color: var(--text-tertiary, #888); font-size: 12px; }
+.flow-error { color: #ef4444; font-size: 12px; margin-bottom: 8px; }
+.flow-chart-wrap { margin-bottom: 10px; }
+.flow-chart-label { font-size: 11px; color: var(--text-tertiary, #888); margin-bottom: 4px; }
+.flow-empty { text-align: center; padding: 20px; color: var(--text-tertiary, #888); font-size: 12px; }
+.flow-summary {
+  display: flex;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.flow-stat { display: flex; flex-direction: column; gap: 2px; }
+.flow-stat-label { font-size: 10px; color: var(--text-tertiary, #888); }
+.flow-stat-value { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.up-text { color: var(--up, #ef4444); }
+.down-text { color: var(--down, #22c55e); }
 </style>

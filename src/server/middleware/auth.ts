@@ -4,11 +4,12 @@ import { eq } from 'drizzle-orm'
 import { db } from '../db/db.js'
 import { users } from '../db/schema.js'
 import { verifyToken, hashPassword } from '../services/auth.js'
+import { loadAdminPermissions } from './adminRbac.js'
 
 declare global {
   namespace Express {
     interface Request {
-      user?: { userId: number; email: string; role: string }
+      user?: { userId: number; email: string; role: string; isAdmin?: boolean; permissions?: string[] }
     }
   }
 }
@@ -16,7 +17,7 @@ declare global {
 const SSO_URL = process.env.SSO_URL || 'http://localhost:3002'
 const isPro = !!process.env.LICENSE_KEY
 
-async function ssoVerify(token: string): Promise<{ userId: number; email: string; role: string } | null> {
+export async function ssoVerify(token: string): Promise<{ userId: number; email: string; role: string } | null> {
   try {
     const ssoRes = await fetch(`${SSO_URL}/api/auth/verify`, {
       method: 'POST',
@@ -75,22 +76,46 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   if (isPro) {
     user = await ssoVerify(token)
-    if (!user) return res.status(502).json({ error: '认证服务不可用，请稍后重试' })
-  } else {
+  }
+  if (!user) {
     user = localVerify(token)
     if (!user) return res.status(401).json({ error: '登录已过期，请重新登录' })
   }
 
-  req.user = user
+  if (user) {
+    const rows = await db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, user.userId)).limit(1);
+    if (rows[0]) {
+      (user as any).isAdmin = rows[0].isAdmin ?? false;
+    }
+    let perms: string[] = [];
+    try { perms = await loadAdminPermissions(user.userId); } catch {}
+    (user as any).permissions = perms;
+    req.user = user;
+  }
   next()
 }
 
-export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization
   if (header?.startsWith('Bearer ')) {
     const token = header.slice(7)
-    const user = isPro ? null : localVerify(token)
-    if (user) req.user = user
+    let user: { userId: number; email: string; role: string; isAdmin?: boolean; permissions?: string[] } | null = null
+    if (isPro) {
+      user = await ssoVerify(token)
+    }
+    if (!user) {
+      user = localVerify(token)
+    }
+    if (user) {
+      const rows = await db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, user.userId)).limit(1);
+      if (rows[0]) {
+        user.isAdmin = rows[0].isAdmin ?? false;
+      }
+      let perms: string[] = [];
+      try { perms = await loadAdminPermissions(user.userId); } catch {}
+      (user as any).permissions = perms;
+      req.user = user;
+    }
   }
   next()
 }

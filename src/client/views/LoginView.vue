@@ -91,7 +91,7 @@ async function handleLogin() {
   width: 52px;
   height: 52px;
   background: var(--brand-gradient);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,7 +195,7 @@ async function handleLogin() {
   height: 14px;
   border: 2px solid rgba(11,13,20,0.3);
   border-top-color: #0b0d14;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

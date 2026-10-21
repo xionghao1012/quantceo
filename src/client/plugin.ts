@@ -1,4 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
+import { reactive } from 'vue'
 
 export interface NavItem {
   label: string
@@ -20,7 +21,7 @@ export interface FrontendPlugin {
 }
 
 class FrontendPluginManager {
-  private _plugins: FrontendPlugin[] = []
+  private _plugins = reactive<FrontendPlugin[]>([])
 
   register(plugin: FrontendPlugin) {
     this._plugins.push(plugin)
@@ -31,7 +32,16 @@ class FrontendPluginManager {
   }
 
   get navGroups(): NavGroup[] {
-    return this._plugins.flatMap(p => p.navGroups)
+    // 按 title 合并同名分组，避免多个插件产生重复的「分析」「交易」分组
+    const merged = new Map<string, NavGroup>()
+    for (const p of this._plugins) {
+      for (const g of p.navGroups) {
+        const existing = merged.get(g.title)
+        if (existing) existing.items.push(...g.items)
+        else merged.set(g.title, { title: g.title, items: [...g.items] })
+      }
+    }
+    return [...merged.values()]
   }
 }
 

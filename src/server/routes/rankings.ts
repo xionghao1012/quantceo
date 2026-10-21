@@ -260,7 +260,7 @@ router.get('/strategies/list', async (_req, res) => {
   }))})
 })
 
-function computeScore(
+export function computeScore(
   strategy: StrategyDef,
   rsi: number | null,
   changePct: number | null,

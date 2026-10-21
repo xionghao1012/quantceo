@@ -5,6 +5,7 @@ export class LazyIndicators {
   private _macd?: MACDResult
   private _rsi?: number[]
   private _bollinger?: { upper: number[]; middle: number[]; lower: number[] }
+  private _kdj?: KDJResult
   private _closes?: number[]
 
   constructor(
@@ -49,6 +50,15 @@ export class LazyIndicators {
       if (ind.startsWith('bb')) return true
     }
     return false
+  }
+
+  get kdj(): KDJResult {
+    if (!this._kdj) this._kdj = calcKDJ(this.klines)
+    return this._kdj
+  }
+
+  get needsKDJ(): boolean {
+    return this.needed.has('kdj') || this.needed.has('kdj_k') || this.needed.has('kdj_d') || this.needed.has('kdj_j')
   }
 
   get length(): number {
@@ -144,4 +154,49 @@ export function calcBollinger(klines: KLine[], period = 20, multiplier = 2) {
     lower.push(ma[i] - multiplier * std)
   }
   return { upper, middle: ma, lower }
+}
+
+export interface KDJResult {
+  k: number[]
+  d: number[]
+  j: number[]
+}
+
+export function calcKDJ(klines: KLine[], period = 9, kPeriod = 3, dPeriod = 3): KDJResult {
+  const highs = klines.map(k => k.high)
+  const lows = klines.map(k => k.low)
+  const closes = klines.map(k => k.close)
+  const rsv: number[] = []
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) { rsv.push(NaN); continue }
+    let max = -Infinity, min = Infinity
+    for (let j = i - period + 1; j <= i; j++) {
+      if (highs[j] > max) max = highs[j]
+      if (lows[j] < min) min = lows[j]
+    }
+    rsv.push(max === min ? 50 : (closes[i] - min) / (max - min) * 100)
+  }
+  const k: number[] = []
+  const d: number[] = []
+  const j: number[] = []
+  for (let i = 0; i < rsv.length; i++) {
+    if (isNaN(rsv[i])) { k.push(NaN); d.push(NaN); j.push(NaN); continue }
+    if (i === period - 1) {
+      k.push((2 * rsv[i] + 50) / 3)
+      d.push((2 * k[i] + 50) / 3)
+    } else {
+      k.push((2 * rsv[i] + (k[i - 1] || 50) * (kPeriod - 1)) / kPeriod)
+      d.push((2 * k[i] + (d[i - 1] || 50) * (dPeriod - 1)) / dPeriod)
+    }
+    j.push(3 * k[i] - 2 * d[i])
+  }
+  return { k, d, j }
+}
+
+export function calcBBPosition(klines: KLine[], period = 20): number[] {
+  const bb = calcBollinger(klines, period)
+  return klines.map((k, i) => {
+    if (isNaN(bb.upper[i]) || bb.upper[i] === bb.lower[i]) return NaN
+    return (k.close - bb.lower[i]) / (bb.upper[i] - bb.lower[i])
+  })
 }

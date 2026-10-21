@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import EmptyState from '../components/EmptyState.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -171,11 +172,6 @@ function boardLabel(b: string) {
   return { hsb: '沪深主板', kcb: '科创板', cyb: '创业板' }[b] || b
 }
 
-function formatDate(d: string) {
-  const dt = new Date(d)
-  return `${dt.getMonth() + 1}/${dt.getDate()}`
-}
-
 onMounted(async () => {
   await fetchDates()
   if (availableDates.value.length > 0) {
@@ -288,9 +284,10 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
     </div>
 
     <div v-else-if="data && !data.hasData && !loading" class="empty-state">
-      <p class="empty-icon">📅</p>
-      <p>{{ selectedDate }} 暂无数据</p>
-      <p class="hint">每个交易日 15:30 后自动计算，或点击右上角「重新计算」</p>
+      <EmptyState variant="list">
+        <p>{{ selectedDate }} 暂无数据</p>
+        <p class="hint">每个交易日 15:30 后自动计算，或点击右上角「重新计算」</p>
+      </EmptyState>
     </div>
 
     <template v-else-if="data">
@@ -412,14 +409,14 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   border: 1px solid var(--border-color, #2a2a3e);
   color: var(--text-primary);
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .btn {
   padding: 6px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   cursor: pointer;
   border: none;
@@ -437,7 +434,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   display: flex;
   gap: 2px;
   background: var(--bg-secondary, #1a1a2e);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 3px;
   margin-bottom: 12px;
 }
@@ -445,7 +442,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   flex: 1;
   padding: 7px 16px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -469,7 +466,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color, #2a2a3e);
   background: var(--bg-secondary, #1a1a2e);
   cursor: pointer;
@@ -498,7 +495,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
 }
 .strategy-btn {
   padding: 6px 14px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color, #2a2a3e);
   background: var(--bg-secondary, #1a1a2e);
   font-size: 12px;
@@ -521,11 +518,11 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   flex-wrap: wrap;
 }
 
-.board-tabs { display: flex; gap: 2px; background: var(--bg-secondary, #1a1a2e); border-radius: 6px; padding: 2px; }
+.board-tabs { display: flex; gap: 2px; background: var(--bg-secondary, #1a1a2e); border-radius: var(--radius-sm); padding: 2px; }
 .board-btn {
   padding: 4px 12px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   cursor: pointer;
   background: transparent;
@@ -542,9 +539,9 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   border: 1px solid var(--border-color, #2a2a3e);
   color: var(--text-primary);
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 .search-input:focus { outline: none; border-color: var(--accent, #3b82f6); }
 
@@ -559,7 +556,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   background: rgba(239,68,68,.1);
   color: #ef4444;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   margin-bottom: 10px;
 }
@@ -576,7 +573,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   width: 24px; height: 24px;
   border: 2px solid var(--border-color, #2a2a3e);
   border-top-color: var(--accent, #3b82f6);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin .6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -586,7 +583,6 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   padding: 40px 20px;
   color: var(--text-tertiary, #888);
 }
-.empty-icon { font-size: 32px; margin: 0 0 8px; }
 .hint { font-size: 12px; margin-top: 4px; color: var(--text-tertiary, #666); }
 
 .table-header {
@@ -603,7 +599,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
 .table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color, #2a2a3e);
 }
 
@@ -649,24 +645,24 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
 .rank-num {
   font-weight: 700;
   color: var(--text-secondary, #999);
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .stock-cell { display: flex; flex-direction: column; gap: 2px; }
 .stock-name { font-weight: 600; font-size: 13px; line-height: 1.3; }
 .stock-meta { display: flex; gap: 6px; align-items: center; font-size: 11px; }
-.stock-code { font-family: monospace; color: var(--text-tertiary, #888); }
+.stock-code { font-family: var(--font-mono); color: var(--text-tertiary, #888); }
 .stock-board {
   font-size: 10px;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--bg-secondary, #1a1a2e);
 }
 .board-hsb { color: #3b82f6; }
 .board-kcb { color: #8b5cf6; }
 .board-cyb { color: #22c55e; }
 
-.metric-val { font-weight: 700; font-family: monospace; }
+.metric-val { font-weight: 700; font-family: var(--font-mono); }
 
 .text-danger { color: #ef4444; }
 .text-success { color: #22c55e; }
@@ -681,12 +677,12 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
   flex: 1;
   height: 8px;
   background: var(--bg-primary, #0f0f1a);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 .score-bar {
   height: 100%;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   transition: width .3s ease;
 }
 .score-a { background: linear-gradient(90deg, #22c55e, #16a34a); }
@@ -697,7 +693,7 @@ watch(selectedStrategy, () => { if (mode.value === 'strategy') fetchRankings() }
 
 .score-num {
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-mono);
   min-width: 28px;
   text-align: right;
   font-size: 13px;

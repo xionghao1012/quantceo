@@ -1,14 +1,13 @@
 import { db } from '../db/db.js'
 import { minuteKlines as minuteKlinesTable } from '../db/schema.js'
-import { eq } from 'drizzle-orm'
+
 import { fetchAkshareMinuteKlinesBatch } from './akshareMinute.js'
 import { cacheSetMinuteKlinesBulk } from './redis.js'
-import type { MinutePeriod, MinuteKLine } from '../../shared/types.js'
+import type{ MinutePeriod, MinuteKLine } from '../../shared/types.js'
 import { appendFileSync } from 'fs'
 
 const PERIODS: MinutePeriod[] = ['m1', 'm5', 'm15', 'm30', 'm60']
 const BATCH_SIZE = 10
-const START_DATE = '2024-01-01'
 const LOG = '/tmp/sync-batch.log'
 
 function log(msg: string) {

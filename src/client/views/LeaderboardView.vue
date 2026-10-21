@@ -181,7 +181,7 @@ function downloadCSV() {
 .card {
   background: var(--bg-secondary, #1a1a2e);
   border: 1px solid var(--border-color, #2a2a3e);
-  border-radius: 12px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .table-wrap {
@@ -246,7 +246,7 @@ td:last-child { padding-right: 20px; }
 .rank-badge { font-size: 16px; }
 
 .stock-code {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -262,7 +262,7 @@ td:last-child { padding-right: 20px; }
 .metric-bar {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-weight: 700;
 }
 .metric-bar.elite { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
@@ -277,7 +277,7 @@ td:last-child { padding-right: 20px; }
   gap: 6px;
   padding: 7px 14px;
   border: 1px solid var(--border-color, #2a2a3e);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary, #ccc);
   font-size: 12px;
@@ -294,7 +294,7 @@ td:last-child { padding-right: 20px; }
   background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
 }
 
@@ -312,7 +312,7 @@ td:last-child { padding-right: 20px; }
   height: 28px;
   border: 3px solid var(--border-color, #333);
   border-top-color: #8b5cf6;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

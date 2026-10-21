@@ -1,7 +1,7 @@
-import { spawn, execSync } from 'child_process'
-import { writeFileSync } from 'fs'
-import { fileURLToPath } from 'url'
-import { dirname, resolve } from 'path'
+import { spawn } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 

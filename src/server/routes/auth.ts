@@ -4,7 +4,8 @@ import { eq, and, gt } from 'drizzle-orm'
 import { db } from '../db/db.js'
 import { sql } from 'drizzle-orm'
 import { users, sessions } from '../db/schema.js'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, ssoVerify } from '../middleware/auth.js'
+import { loadAdminPermissions } from '../middleware/adminRbac.js'
 import {
   hashPassword, verifyPassword, generateToken, generateRefreshToken,
   sanitizeUser, validatePassword, verifyToken,
@@ -38,6 +39,15 @@ async function seedNewUser(userId: number, email: string, name: string) {
   } catch {}
 }
 
+const localHandlers: Record<string, (req: Request, res: Response) => Promise<any>> = {
+  register: localRegister,
+  login: localLogin,
+  refresh: localRefresh,
+  logout: localLogout,
+  me: localMe,
+  'change-password': localChangePassword,
+}
+
 function proxyToSSO(req: Request, res: Response, path: string, opts: { method?: string; body?: boolean } = {}) {
   const url = `${SSO_URL}/api/auth/${path}`
   const options: RequestInit = {
@@ -64,7 +74,11 @@ function proxyToSSO(req: Request, res: Response, path: string, opts: { method?: 
       })
       res.json(data)
     })
-    .catch(() => res.status(502).json({ error: '认证服务暂时不可用，请稍后重试' }))
+    .catch(() => {
+      const handler = localHandlers[path]
+      if (handler) handler(req, res)
+      else res.status(502).json({ error: '认证服务暂时不可用，请稍后重试' })
+    })
 }
 
 async function localRegister(req: Request, res: Response) {
@@ -178,9 +192,22 @@ async function localMe(req: Request, res: Response) {
       return res.status(401).json({ error: '未登录' })
     }
     const payload = verifyToken(authHeader.slice(7))
-    const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1)
+    const [user] = await db.select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      avatar: users.avatar,
+      role: users.role,
+      settings: users.settings,
+      usage: users.usage,
+      isAdmin: users.isAdmin,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    }).from(users).where(eq(users.id, payload.userId)).limit(1)
     if (!user) return res.status(401).json({ error: '用户不存在' })
-    res.json({ user: sanitizeUser(user) })
+    let perms: string[] = []
+    try { perms = await loadAdminPermissions(user.id) } catch {}
+    res.json({ user: { ...sanitizeUser(user), permissions: perms } })
   } catch {
     res.status(401).json({ error: 'token 无效' })
   }
@@ -242,7 +269,44 @@ if (isPro) {
   router.post('/login', (req, res) => proxyToSSO(req, res, 'login', { method: 'POST', body: true }))
   router.post('/refresh', (req, res) => proxyToSSO(req, res, 'refresh', { method: 'POST', body: true }))
   router.post('/logout', (req, res) => proxyToSSO(req, res, 'logout', { method: 'POST', body: true }))
-  router.get('/me', (req, res) => proxyToSSO(req, res, 'me'))
+  router.get('/me', async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: '未登录' })
+    }
+    const token = authHeader.slice(7)
+    let userId: number | null = null
+
+    // Try SSO first
+    const ssoUser = await ssoVerify(token)
+    if (ssoUser) {
+      userId = ssoUser.userId
+    } else {
+      // Fall back to local JWT verification
+      try {
+        const payload = verifyToken(token)
+        userId = payload.userId
+      } catch {}
+    }
+
+    if (!userId) return res.status(401).json({ error: 'token 无效' })
+    const [user] = await db.select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      avatar: users.avatar,
+      role: users.role,
+      settings: users.settings,
+      usage: users.usage,
+      isAdmin: users.isAdmin,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    }).from(users).where(eq(users.id, userId)).limit(1)
+    if (!user) return res.status(401).json({ error: '用户不存在' })
+    let perms: string[] = []
+    try { perms = await loadAdminPermissions(user.id) } catch {}
+    res.json({ user: { ...sanitizeUser(user), permissions: perms } })
+  })
   router.put('/me', (req, res) => proxyToSSO(req, res, 'me', { method: 'PUT', body: true }))
   router.post('/change-password', requireAuth, (req, res) => proxyToSSO(req, res, 'change-password', { method: 'POST', body: true }))
   router.get('/github', (_req, res) => { res.redirect(`${SSO_URL}/api/auth/github`) })

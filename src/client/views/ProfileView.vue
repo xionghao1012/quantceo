@@ -20,6 +20,14 @@ const pwSaving = ref(false)
 const subStats = ref<any>(null)
 const subLoading = ref(false)
 
+const orderId = ref('')
+const orderPlan = ref('pro')
+const orderPlatform = ref('wechat')
+const orderNote = ref('')
+const orderSubmitting = ref(false)
+const orderMsg = ref('')
+const orderMsgOk = ref(false)
+
 const referralCode = ref('')
 const referralRewards = ref<any[]>([])
 const referralStats = ref({ totalEarnings: 0, totalReferees: 0 })
@@ -28,6 +36,18 @@ const applyCodeInput = ref('')
 const applyMsg = ref('')
 const applyLoading = ref(false)
 const copyMsg = ref('')
+
+// 模板里不能直接用 navigator / setTimeout（Vue 模板不暴露全局对象）
+async function copyReferralCode() {
+  if (!referralCode.value) return
+  try {
+    await navigator.clipboard.writeText(referralCode.value)
+    copyMsg.value = '已复制！'
+    setTimeout(() => (copyMsg.value = ''), 2000)
+  } catch {
+    copyMsg.value = '复制失败，请手动选择'
+  }
+}
 
 onMounted(() => {
   name.value = auth.user?.name || ''
@@ -42,6 +62,37 @@ async function loadSubStats() {
     if (res.ok) subStats.value = await res.json()
   } finally {
     subLoading.value = false
+  }
+}
+
+async function submitOrder() {
+  orderSubmitting.value = true
+  orderMsg.value = ''
+  orderMsgOk.value = false
+  try {
+    const res = await fetch('/api/subscription/submit-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...auth.authHeaders() },
+      body: JSON.stringify({
+        plan: orderPlan.value,
+        platform: orderPlatform.value,
+        orderId: orderId.value.trim(),
+        note: orderNote.value.trim() || undefined,
+      }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      orderMsg.value = data.message || '订单已提交，管理员验证后将自动激活'
+      orderMsgOk.value = true
+      orderId.value = ''
+      orderNote.value = ''
+    } else {
+      orderMsg.value = data.error || '提交失败'
+    }
+  } catch (e: any) {
+    orderMsg.value = e.message || '网络错误'
+  } finally {
+    orderSubmitting.value = false
   }
 }
 
@@ -277,8 +328,8 @@ async function savePushSettings() {
       <div class="field">
         <label>当前套餐</label>
         <div class="plan-badge-field">
-          <span class="plan-name-display">{{ subStats?.planName || auth.user?.role || 'free' }}</span>
-          <button v-if="subStats?.plan === 'free'" class="upgrade-link" @click="router.push('/upgrade')">升级 →</button>
+          <span class="plan-name-display">{{ subStats?.planName || (subStats?.plan === 'free' ? '免费版' : subStats?.plan === 'pro' ? 'Pro 版' : subStats?.plan === 'premium' ? 'Premium' : '免费版') }}</span>
+          <button v-if="!subStats || (subStats?.plan || 'free') === 'free'" class="upgrade-link" @click="router.push('/pricing')">升级 →</button>
         </div>
       </div>
       <div class="field">
@@ -404,10 +455,53 @@ async function savePushSettings() {
       <div v-if="subLoading" class="loading-state"><div class="spinner" /><span>加载中...</span></div>
       <template v-else-if="subStats">
         <div class="usage-plan-header">
-          <div class="plan-label">{{ subStats.planName }}</div>
-          <button v-if="subStats.plan !== 'premium'" class="upgrade-btn" @click="router.push('/upgrade')">
+          <div class="plan-label">{{ subStats.planName || subStats.plan }}</div>
+          <button v-if="subStats.plan !== 'premium'" class="upgrade-btn" @click="router.push('/pricing')">
             升级套餐 →
           </button>
+        </div>
+
+        <!-- 提交订单号 -->
+        <div v-if="subStats.plan === 'free'" class="order-submit-card">
+          <div class="order-submit-title">已有支付订单？提交交易单号激活套餐</div>
+          <div class="order-form-row">
+            <input
+              v-model="orderPlan"
+              type="text"
+              placeholder="购买的套餐 (pro 或 premium)"
+              class="order-input order-input-sm"
+            />
+            <input
+              v-model="orderPlatform"
+              type="text"
+              placeholder="支付方式 (wechat/alipay)"
+              class="order-input order-input-sm"
+            />
+          </div>
+          <div class="order-form-row">
+            <input
+              v-model="orderId"
+              type="text"
+              placeholder="交易单号（微信/支付宝付款后的订单号）"
+              class="order-input"
+            />
+          </div>
+          <div class="order-form-row">
+            <input
+              v-model="orderNote"
+              type="text"
+              placeholder="备注（可选，如 QQ 号）"
+              class="order-input"
+            />
+          </div>
+          <button
+            class="order-submit-btn"
+            :disabled="orderSubmitting || !orderId.trim()"
+            @click="submitOrder"
+          >
+            {{ orderSubmitting ? '提交中…' : '提交订单' }}
+          </button>
+          <p v-if="orderMsg" class="order-msg" :class="orderMsgOk ? 'success' : 'error'">{{ orderMsg }}</p>
         </div>
 
         <div class="usage-grid">
@@ -493,7 +587,7 @@ async function savePushSettings() {
       <div class="referral-code-section">
         <div class="referral-code-label">你的邀请码</div>
         <div class="referral-code-value">{{ referralCode || '加载中...' }}</div>
-        <button class="btn-sm" @click="navigator.clipboard.writeText(referralCode).then(() => { copyMsg = '已复制！' ; setTimeout(() => copyMsg = '', 2000) })">
+        <button class="btn-sm" @click="copyReferralCode">
           复制邀请码
         </button>
       </div>
@@ -618,7 +712,7 @@ async function savePushSettings() {
   position: absolute;
   inset: 0;
   background: var(--border);
-  border-radius: 11px;
+  border-radius: var(--radius);
   transition: var(--transition);
 }
 .toggle-slider::before {
@@ -629,7 +723,7 @@ async function savePushSettings() {
   left: 3px;
   top: 3px;
   background: #fff;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   transition: var(--transition);
 }
 .toggle input:checked + .toggle-slider { background: var(--brand); }
@@ -673,14 +767,14 @@ async function savePushSettings() {
 .usage-item { display: flex; flex-direction: column; gap: 4px; }
 .usage-item-label { font-size: 12px; color: var(--text-tertiary); }
 .usage-bar-wrap { display: flex; align-items: center; gap: 10px; }
-.usage-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
-.usage-bar-fill { height: 100%; background: var(--brand-gradient); border-radius: 3px; transition: width 0.3s; }
+.usage-bar { flex: 1; height: 6px; background: var(--border); border-radius: var(--radius-xs); overflow: hidden; }
+.usage-bar-fill { height: 100%; background: var(--brand-gradient); border-radius: var(--radius-xs); transition: width 0.3s; }
 .usage-count { font-size: 12px; font-weight: 600; min-width: 60px; text-align: right; }
 .features-list { background: var(--bg); border-radius: var(--radius-sm); padding: 12px; }
 .features-title { font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px; }
 .feature-item { font-size: 13px; color: var(--text-secondary); padding: 3px 0; }
 .loading-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px; color: var(--text-tertiary); }
-.spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--brand); border-radius: var(--radius-full); animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .apikeys-card { max-width: min(720px, calc(100% - 32px)); }
@@ -696,7 +790,7 @@ async function savePushSettings() {
 .empty-state { text-align: center; padding: 30px; color: var(--text-tertiary); font-size: 14px; }
 .new-key-display { background: var(--bg); border: 1px solid var(--brand); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; }
 .new-key-label { font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px; }
-.new-key-value { font-family: monospace; font-size: 13px; word-break: break-all; padding: 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); margin-bottom: 10px; }
+.new-key-value { font-family: var(--font-mono); font-size: 13px; word-break: break-all; padding: 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); margin-bottom: 10px; }
 .create-key-form { display: flex; gap: 8px; align-items: center; }
 .create-key-form input { flex: 1; padding: 7px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); border-radius: var(--radius); font-size: 13px; }
 .create-key-form input:focus { outline: none; border-color: var(--brand); }
@@ -711,7 +805,7 @@ async function savePushSettings() {
 .referral-desc { font-size: 13px; color: var(--text-tertiary); }
 .referral-code-section { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg); border-radius: var(--radius-sm); border: 1px solid var(--border-light); margin-bottom: 16px; }
 .referral-code-label { font-size: 12px; color: var(--text-tertiary); }
-.referral-code-value { font-family: monospace; font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--brand); flex: 1; }
+.referral-code-value { font-family: var(--font-mono); font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--brand); flex: 1; }
 .referral-apply-section { margin-bottom: 20px; padding: 14px; background: var(--bg); border-radius: var(--radius-sm); border: 1px solid var(--border-light); }
 .referral-apply-form { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 .referral-input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 13px; text-transform: uppercase; }
@@ -729,6 +823,33 @@ async function savePushSettings() {
 .referral-item-name { font-size: 14px; font-weight: 600; }
 .referral-item-meta { font-size: 12px; color: var(--text-tertiary); }
 .referral-item-amount { font-size: 16px; font-weight: 700; color: var(--brand); }
+
+/* 订单提交 */
+.order-submit-card {
+  margin-top: 16px; padding: 16px; background: var(--bg-secondary);
+  border-radius: var(--radius); border: 1px dashed var(--border);
+}
+.order-submit-title {
+  font-size: 13px; font-weight: 600; margin-bottom: 10px;
+  color: var(--text-primary);
+}
+.order-form-row {
+  display: flex; gap: 8px; margin-bottom: 8px;
+}
+.order-input {
+  flex: 1; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary);
+  font-size: 13px; width: 100%; box-sizing: border-box;
+}
+.order-input-sm { min-width: 0; }
+.order-input:focus { outline: none; border-color: var(--brand); }
+.order-submit-btn {
+  padding: 8px 20px; border: none; border-radius: var(--radius-sm);
+  background: var(--brand); color: #fff; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.order-submit-btn:disabled { opacity: 0.5; cursor: default; }
+.order-msg { font-size: 12px; margin-top: 6px; }
 
 @media (min-width: 768px) {
   .profile-view { padding: 32px; }

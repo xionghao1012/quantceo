@@ -3,15 +3,19 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStockStore } from '../stores/stock'
 import TermTip from '../components/TermTip.vue'
+import QuickAlertModal from '../components/QuickAlertModal.vue'
 
 const router = useRouter()
 const store = useStockStore()
 
 interface Field { field: string; label: string; type: string; operators: string[] }
 interface Condition { field: string; operator: string; value: number | string | [number, number] }
+interface MoneyFlowCondition { field: 'moneyInflowSum' | 'moneyInflowPctAvg'; operator: string; value: number; window: number }
 
 const fields = ref<Field[]>([])
 const conditions = ref<Condition[]>([{ field: 'change', operator: '>', value: 5 }])
+const moneyFlowConditions = ref<MoneyFlowCondition[]>([])
+const quickAlertStock = ref<{ code: string; name: string } | null>(null)
 const sortField = ref('change')
 const sortOrder = ref<'asc' | 'desc'>('desc')
 const page = ref(1)
@@ -47,6 +51,29 @@ function removeCondition(i: number) {
   conditions.value.splice(i, 1)
 }
 
+const moneyFlowFieldOptions = [
+  { field: 'moneyInflowSum', label: '近N日净流入总额' },
+  { field: 'moneyInflowPctAvg', label: '近N日净流入率均值' },
+]
+const moneyFlowWindowOptions = [
+  { value: 5, label: '5日' },
+  { value: 10, label: '10日' },
+  { value: 20, label: '20日' },
+]
+const moneyFlowOperators = [
+  { value: '>', label: '大于' },
+  { value: '<', label: '小于' },
+  { value: '==', label: '等于' },
+]
+
+function addMoneyFlowCondition() {
+  moneyFlowConditions.value.push({ field: 'moneyInflowSum', operator: '>', value: 0, window: 5 })
+}
+
+function removeMoneyFlowCondition(i: number) {
+  moneyFlowConditions.value.splice(i, 1)
+}
+
 function fieldFor(f: string) {
   return fields.value.find(x => x.field === f)
 }
@@ -62,6 +89,7 @@ async function runScreener() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         conditions: conditions.value,
+        moneyFlowConditions: moneyFlowConditions.value,
         sort: { field: sortField.value, order: sortOrder.value },
         page: 1,
         limit: PAGE_SIZE,
@@ -90,6 +118,7 @@ async function goPage(p: number) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         conditions: conditions.value,
+        moneyFlowConditions: moneyFlowConditions.value,
         sort: { field: sortField.value, order: sortOrder.value },
         page: p,
         limit: PAGE_SIZE,
@@ -156,6 +185,27 @@ function fmtVol(v: number) {
 
       <div class="cond-actions">
         <button class="add-btn" @click="addCondition">+ 添加条件</button>
+      </div>
+
+      <!-- 资金流条件 -->
+      <div class="mf-section">
+        <div class="mf-section-header">
+          <span class="mf-title">💰 资金流条件</span>
+          <button class="add-btn small" @click="addMoneyFlowCondition">+ 添加</button>
+        </div>
+        <div v-for="(mc, i) in moneyFlowConditions" :key="i" class="cond-row mf-cond-row">
+          <select v-model="mc.field" class="cond-select">
+            <option v-for="f in moneyFlowFieldOptions" :key="f.field" :value="f.field">{{ f.label }}</option>
+          </select>
+          <select v-model="mc.window" class="cond-select window-select">
+            <option v-for="w in moneyFlowWindowOptions" :key="w.value" :value="w.value">{{ w.label }}</option>
+          </select>
+          <select v-model="mc.operator" class="cond-select op-select">
+            <option v-for="op in moneyFlowOperators" :key="op.value" :value="op.value">{{ op.label }}</option>
+          </select>
+          <input type="number" v-model.number="mc.value" class="cond-input" placeholder="数值" />
+          <button class="cond-remove" @click="removeMoneyFlowCondition(i)" aria-label="移除">✕</button>
+        </div>
       </div>
 
       <div class="control-row" style="margin-top: 16px">
@@ -227,7 +277,12 @@ function fmtVol(v: number) {
                 <td class="num" :class="(s.indicators?.ma20 ?? 0) >= s.price ? 'up-text' : 'down-text'">{{ fmtPrice(s.indicators?.ma20) }}</td>
                 <td class="num">{{ s.indicators?.macd?.toFixed(3) ?? '--' }}</td>
                 <td class="num">{{ s.indicators?.rsi?.toFixed(1) ?? '--' }}</td>
-                <td><button class="analyze-btn" @click="viewStock(s.code)">分析</button></td>
+                <td>
+                  <div class="action-btns">
+                    <button class="analyze-btn" @click="viewStock(s.code)">分析</button>
+                    <button class="alert-btn" title="设置告警" @click="quickAlertStock = { code: s.code, name: s.name }">⚡</button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -246,6 +301,12 @@ function fmtVol(v: number) {
         <button class="page-btn page-nav" :disabled="page === totalPages" @click="goPage(totalPages)">»</button>
       </div>
     </template>
+
+    <QuickAlertModal
+      v-if="quickAlertStock"
+      :stock="quickAlertStock"
+      @close="quickAlertStock = null"
+    />
   </div>
 </template>
 
@@ -260,11 +321,40 @@ function fmtVol(v: number) {
 .op-select { min-width: 80px; }
 .cond-input { padding: 6px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 13px; width: 100px; }
 .cond-sep { color: var(--text-tertiary); font-size: 13px; }
-.cond-remove { width: 36px; height: 36px; border: 1px solid var(--border); background: transparent; color: var(--text-tertiary); border-radius: 4px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.cond-remove { width: 36px; height: 36px; border: 1px solid var(--border); background: transparent; color: var(--text-tertiary); border-radius: var(--radius-xs); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
 .cond-remove:hover { border-color: var(--danger); color: var(--danger); }
 .cond-actions { margin-top: 8px; }
 .add-btn { padding: 5px 14px; border: 1px dashed var(--border); background: transparent; color: var(--text-tertiary); border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; }
 .add-btn:hover { border-color: var(--brand); color: var(--brand); }
+.add-btn.small { padding: 3px 10px; font-size: 11px; }
+
+.mf-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.mf-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.mf-title { font-size: 13px; font-weight: 700; color: var(--brand); }
+.mf-cond-row { margin-bottom: 8px; }
+.window-select { min-width: 70px; }
+
+.action-btns { display: flex; gap: 6px; align-items: center; }
+.alert-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--brand);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 7px;
+  transition: all 0.15s;
+}
+.alert-btn:hover { background: var(--brand-glow); border-color: var(--brand); }
 
 .control-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 .control-row label { display: flex; flex-direction: column; gap: 4px; }
@@ -274,19 +364,19 @@ function fmtVol(v: number) {
 .run-btn { display: flex; align-items: center; gap: 6px; padding: 8px 20px; background: var(--brand-gradient); color: #0b0d14; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 13px; height: 36px; box-shadow: 0 2px 12px var(--brand-glow); transition: var(--transition); white-space: nowrap; }
 .run-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 20px var(--brand-glow); }
 .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.2); border-top-color: #0b1119; border-radius: 50%; animation: spin 0.6s linear infinite; }
+.btn-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.2); border-top-color: #0b1119; border-radius: var(--radius-full); animation: spin 0.6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .val-error { margin-top: 8px; font-size: 12px; color: var(--danger); }
 
 .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 20px; color: var(--text-tertiary); }
-.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--brand); border-radius: var(--radius-full); animation: spin 0.8s linear infinite; }
 
 .empty-state { text-align: center; padding: 40px; color: var(--text-tertiary); font-size: 14px; }
 
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .section-header h2 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .stock-count { font-size: 12px; font-weight: 400; color: var(--text-tertiary); margin-left: 4px; }
-.section-header .accent { width: 3px; height: 14px; background: var(--brand-gradient); border-radius: 2px; }
+.section-header .accent { width: 3px; height: 14px; background: var(--brand-gradient); border-radius: var(--radius-xs); }
 .page-info { font-size: 12px; color: var(--text-tertiary); }
 
 .card { margin-bottom: 20px; padding: 16px; }

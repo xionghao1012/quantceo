@@ -10,6 +10,21 @@ import type { Rule } from '../../shared/types.js'
 
 const router = Router()
 
+const BUILTIN_STRATEGIES = [
+  { id: 1, name: 'MA5/20 金叉', direction: 'BUY', description: '短期均线向上交叉', strength: 70 },
+  { id: 1, name: 'MA5/20 死叉', direction: 'SELL', description: '短期均线向下交叉', strength: 70 },
+  { id: 2, name: 'MA10/60 金叉', direction: 'BUY', description: '中长期均线向上交叉', strength: 80 },
+  { id: 2, name: 'MA10/60 死叉', direction: 'SELL', description: '中长期均线向下交叉', strength: 80 },
+  { id: 3, name: 'MACD 金叉', direction: 'BUY', description: 'MACD 差值向上穿越信号线', strength: 60 },
+  { id: 3, name: 'MACD 死叉', direction: 'SELL', description: 'MACD 差值向下穿越信号线', strength: 60 },
+  { id: 4, name: 'RSI 超卖', direction: 'BUY', description: 'RSI < 30，超卖反弹机会', strength: 50 },
+  { id: 4, name: 'RSI 超买', direction: 'SELL', description: 'RSI > 70，超买回调风险', strength: 50 },
+]
+
+router.get('/', async (_req, res) => {
+  res.json({ strategies: BUILTIN_STRATEGIES })
+})
+
 async function loadCustomStrategy(userStrategyId: number): Promise<{ rules: Rule[]; name: string } | null> {
   const rows = await db.select().from(userStrategies).where(eq(userStrategies.id, userStrategyId)).limit(1)
   if (!rows[0]) return null
@@ -67,7 +82,7 @@ router.post('/', async (req, res) => {
 })
 
 router.post('/save-klines', async (req, res) => {
-  const { code, klineData } = req.body
+  const { klineData } = req.body
   for (const k of klineData) {
     await db.insert(klines).values({
       code: k.code, date: k.date, open: String(k.open), high: String(k.high),

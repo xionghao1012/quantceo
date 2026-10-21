@@ -73,7 +73,7 @@ async function fetchIndexKlines(secid: string, days = 100): Promise<KLine[]> {
   }))
 }
 
-function computeIndicators(klines: KLine[]) {
+export function computeIndicators(klines: KLine[]) {
   if (klines.length < 60) return null
   const reversed = [...klines].reverse()
   const closes = reversed.map(k => k.close)
@@ -92,7 +92,7 @@ function computeIndicators(klines: KLine[]) {
   }
 }
 
-function classifyState(ind: ReturnType<typeof computeIndicators>, closes: number[]): MarketState {
+export function classifyState(ind: ReturnType<typeof computeIndicators>, closes: number[]): MarketState {
   if (!ind) return 'range_bound'
   const { rsi, macdSignal, ma5, ma20, ma60 } = ind
   const price = closes[closes.length - 1]
@@ -110,7 +110,7 @@ function classifyState(ind: ReturnType<typeof computeIndicators>, closes: number
   return 'range_bound'
 }
 
-function getRecommendedStrategies(state: MarketState): StrategyRecommendation[] {
+export function getRecommendedStrategies(state: MarketState): StrategyRecommendation[] {
   const stateStrategies: Record<MarketState, number[]> = {
     trending_up: [1, 2, 3],
     oversold: [4, 3],

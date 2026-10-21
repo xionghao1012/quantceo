@@ -9,6 +9,12 @@ import watchlistRoutes from '../routes/watchlist.js'
 import marketStateRoutes from '../routes/marketState.js'
 import rankingsRoutes from '../routes/rankings.js'
 import internalRoutes from '../routes/internal.js'
+import adminRoutes from '../routes/admin.js'
+import subscriptionRoutes from '../routes/subscription.js'
+import limitUpRoutes from '../routes/limitUp.js'
+import moneyFlowRoutes from '../routes/moneyFlow.js'
+import exportRoutes from '../routes/export.js'
+import paperTradingRoutes from '../routes/paperTrading.js'
 
 export const corePlugin: QuantPlugin = {
   name: 'core',
@@ -23,5 +29,11 @@ export const corePlugin: QuantPlugin = {
     { prefix: '/api/market', router: marketStateRoutes },
     { prefix: '/api/rankings', router: rankingsRoutes },
     { prefix: '/api/internal', router: internalRoutes },
+    { prefix: '/api/admin', router: adminRoutes },
+    { prefix: '/api/subscription', router: subscriptionRoutes },
+    { prefix: '/api/limit-up', router: limitUpRoutes },
+    { prefix: '/api/moneyflow', router: moneyFlowRoutes },
+    { prefix: '/api/paper', router: paperTradingRoutes },
+    { prefix: '/api/export', router: exportRoutes },
   ],
 }

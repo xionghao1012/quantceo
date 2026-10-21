@@ -30,18 +30,14 @@ export async function fetchBaostockMinuteKlines(
 ): Promise<MinuteKLine[]> {
   if (period === 'm1') return []
 
-  try {
-    const result = runPython({
-      action: 'fetch',
-      codes: [code],
-      period,
-      start_date: startDate || '20000101',
-      end_date: endDate,
-    })
-    return (result.data[code] || []) as MinuteKLine[]
-  } catch (e: any) {
-    throw e
-  }
+  const result = runPython({
+    action: 'fetch',
+    codes: [code],
+    period,
+    start_date: startDate || '20000101',
+    end_date: endDate,
+  })
+  return (result.data[code] || []) as MinuteKLine[]
 }
 
 export async function fetchBaostockMinuteKlinesBatch(
@@ -53,16 +49,12 @@ export async function fetchBaostockMinuteKlinesBatch(
 ): Promise<Record<string, MinuteKLine[]>> {
   if (period === 'm1' || codes.length === 0) return {}
 
-  try {
-    const result = runPython({
-      action: 'fetch',
-      codes,
-      period,
-      start_date: startDate || '20000101',
-      end_date: endDate,
-    }, timeoutMs)
-    return result.data as Record<string, MinuteKLine[]>
-  } catch (e: any) {
-    throw e
-  }
+  const result = runPython({
+    action: 'fetch',
+    codes,
+    period,
+    start_date: startDate || '20000101',
+    end_date: endDate,
+  }, timeoutMs)
+  return result.data as Record<string, MinuteKLine[]>
 }

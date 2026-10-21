@@ -80,17 +80,6 @@ function resolveVal(val, values) {
   return values[val] ?? NaN
 }
 
-function extractNeededIndicators(rules) {
-  const needed = new Set()
-  for (const rule of rules) {
-    for (const c of rule.conditions) {
-      needed.add(c.indicator.toLowerCase())
-      if (typeof c.value === 'string') needed.add(c.value.toLowerCase())
-    }
-  }
-  return needed
-}
-
 function scanStock(code, name, klines, customRules, customRuleName, needed) {
   if (klines.length < 100) return null
 

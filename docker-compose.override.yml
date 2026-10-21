@@ -1,0 +1,32 @@
+services:
+  quant-sso:
+    environment:
+      PG_HOST: host-gateway
+    extra_hosts:
+      - "host-gateway:host-gateway"
+    env_file: .env
+
+  quant-ai:
+    environment:
+      PG_HOST: host-gateway
+    extra_hosts:
+      - "host-gateway:host-gateway"
+    env_file: .env
+
+  quant-trading:
+    environment:
+      PG_HOST: host-gateway
+      REDIS_URL: redis://host-gateway:6379
+    extra_hosts:
+      - "host-gateway:host-gateway"
+    env_file: .env
+    volumes:
+      - ./dist:/app/dist
+      - ./src/server/data:/app/src/server/data:ro
+
+  quant-sso-migrate:
+    environment:
+      PG_HOST: host-gateway
+    extra_hosts:
+      - "host-gateway:host-gateway"
+    env_file: .env

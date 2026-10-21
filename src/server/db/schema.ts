@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, decimal, date, integer, jsonb, timestamp, text, boolean, numeric, real, unique, bigint } from 'drizzle-orm/pg-core'
+import { pgTable, serial, varchar, decimal, date, integer, jsonb, timestamp, text, boolean, numeric, real, unique, bigint, primaryKey, index } from 'drizzle-orm/pg-core'
 
 export const stocks = pgTable('stocks', {
   id: serial('id').primaryKey(),
@@ -91,6 +91,7 @@ export const users = pgTable('users', {
   avatar: varchar('avatar', { length: 500 }).notNull().default(''),
   passwordHash: varchar('password_hash', { length: 255 }).notNull().default(''),
   role: varchar('role', { length: 20 }).notNull().default('free'),
+  isAdmin: boolean('is_admin').default(false).notNull(),
   settings: jsonb('settings').default('{}').notNull(),
   usage: jsonb('usage').default('{}').notNull(),
   referralCode: varchar('referral_code', { length: 50 }).notNull().default(''),
@@ -163,6 +164,12 @@ export const subscriptions = pgTable('subscriptions', {
   trialEndsAt: timestamp('trial_ends_at'),
   currentPeriodEnd: timestamp('current_period_end').notNull(),
   cancelledAt: timestamp('cancelled_at'),
+  externalOrderId: varchar('external_order_id', { length: 100 }),
+  externalPlatform: varchar('external_platform', { length: 20 }),
+  externalNote: text('external_note'),
+  externalSubmittedAt: timestamp('external_submitted_at'),
+  externalVerifiedAt: timestamp('external_verified_at'),
+  externalVerifiedBy: integer('external_verified_by'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -407,3 +414,245 @@ export const positions = pgTable('positions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
+
+export const schedulerLog = pgTable('scheduler_log', {
+  id: serial('id').primaryKey(),
+  taskName: varchar('task_name', { length: 100 }).notNull(),
+  execDate: date('exec_date').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('success'),
+  itemsProcessed: integer('items_processed').default(0),
+  errorMessage: text('error_message'),
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at').defaultNow().notNull(),
+})
+
+export const permissions = pgTable('permissions', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 64 }).notNull().unique(),
+  name_zh: varchar('name_zh', { length: 100 }).notNull(),
+  module: varchar('module', { length: 32 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const adminRoles = pgTable('admin_roles', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 32 }).notNull().unique(),
+  name_zh: varchar('name_zh', { length: 64 }).notNull(),
+  description: text('description'),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const adminRolePermissions = pgTable('admin_role_permissions', {
+  roleId: integer('role_id').notNull().references(() => adminRoles.id, { onDelete: 'cascade' }),
+  permissionId: integer('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.roleId, table.permissionId] }),
+}))
+
+export const adminUserRoles = pgTable('admin_user_roles', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  roleId: integer('role_id').notNull().references(() => adminRoles.id, { onDelete: 'cascade' }),
+  grantedBy: integer('granted_by'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueUserRole: unique('admin_user_roles_user_role_unique').on(table.userId, table.roleId),
+}))
+
+export const moneyFlowDaily = pgTable('money_flow_daily', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 10 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  tradeDate: date('trade_date').notNull(),
+  closePrice: numeric('close_price', { precision: 12, scale: 2 }),
+  changePct: numeric('change_pct', { precision: 8, scale:4 }),
+  netInflowSuperLarge: numeric('net_inflow_super_large', { precision: 16, scale: 2 }).default('0'),
+  netInflowLarge: numeric('net_inflow_large', { precision: 16, scale: 2 }).default('0'),
+  netInflowMedium: numeric('net_inflow_medium', { precision: 16, scale: 2 }).default('0'),
+  netInflowSmall: numeric('net_inflow_small', { precision: 16, scale: 2 }).default('0'),
+  netInflowMain: numeric('net_inflow_main', { precision: 16, scale: 2 }).default('0'),
+  netInflowMainPct: numeric('net_inflow_main_pct', { precision: 8, scale: 4 }).default('0'),
+  turnoverRate: numeric('turnover_rate', { precision: 8, scale: 4 }),
+  source: varchar('source', { length: 20 }).default('eastmoney').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  uniq: unique().on(table.code, table.tradeDate),
+  codeIdx: index('idx_moneyflow_code').on(table.code),
+  dateIdx: index('idx_moneyflow_date').on(table.tradeDate),
+}))
+
+export const moneyFlowRealtime = pgTable('money_flow_realtime', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 10 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  updateTime: timestamp('update_time').notNull(),
+  closePrice: numeric('close_price', { precision: 12, scale: 2 }),
+  netInflowSuperLarge: numeric('net_inflow_super_large', { precision: 16, scale: 2 }).default('0'),
+  netInflowLarge: numeric('net_inflow_large', { precision: 16, scale: 2 }).default('0'),
+  netInflowMedium: numeric('net_inflow_medium', { precision: 16, scale: 2 }).default('0'),
+  netInflowSmall: numeric('net_inflow_small', { precision: 16, scale: 2 }).default('0'),
+  netInflowMain: numeric('net_inflow_main', { precision: 16, scale: 2 }).default('0'),
+  netInflowMainPct: numeric('net_inflow_main_pct', { precision: 8, scale: 4 }).default('0'),
+  source: varchar('source', { length: 20 }).default('eastmoney').notNull(),
+  isLimitUp: boolean('is_limit_up').default(false).notNull(),
+  isAuctionAnomaly: boolean('is_auction_anomaly').default(false).notNull(),
+  anomalyReason: varchar('anomaly_reason', { length: 100 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  codeTimeIdx: index('idx_moneyflow_rt_code_time').on(table.code, table.updateTime),
+}))
+
+export const moneyFlowAlerts = pgTable('money_flow_alerts', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 10 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  alertType: varchar('alert_type', { length: 30 }).notNull(),
+  detail: jsonb('detail').default('{}').notNull(),
+  notified: boolean('notified').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const moneyFlowSources = pgTable('money_flow_sources', {
+  id: serial('id').primaryKey(),
+  sourceName: varchar('source_name', { length: 50 }).notNull().unique(),
+  sourceType: varchar('source_type', { length: 20 }).notNull().default('primary'),
+  isActive: boolean('is_active').default(true).notNull(),
+  lastSuccessAt: timestamp('last_success_at'),
+  lastFailAt: timestamp('last_fail_at'),
+  failCount: integer('fail_count').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const moneyFlowAlertConfigs = pgTable('money_flow_alert_configs', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 10 }),
+  name: varchar('name', { length: 100 }),
+  enabled: boolean('enabled').default(true).notNull(),
+  thresholdType: varchar('threshold_type', { length: 20 }).notNull(),
+  thresholdValue: numeric('threshold_value', { precision: 16, scale: 2 }).notNull(),
+  direction: varchar('direction', { length: 10 }).notNull().default('inflow'),
+  techResonanceEnabled: boolean('tech_resonance_enabled').default(false).notNull(),
+  techResonanceMacd: boolean('tech_resonance_macd').default(false).notNull(),
+  techResonanceMa: boolean('tech_resonance_ma').default(false).notNull(),
+  basicFilterEnabled: boolean('basic_filter_enabled').default(true).notNull(),
+  smartFilterEnabled: boolean('smart_filter_enabled').default(false).notNull(),
+  triggeredAt: timestamp('triggered_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('idx_mf_config_user').on(table.userId),
+  codeIdx: index('idx_mf_config_code').on(table.code),
+}))
+
+export const limitUpRecords = pgTable('limit_up_records', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 10 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  date: date('date').notNull(),
+  prevClose: numeric('prev_close', { precision: 12, scale: 2 }).notNull(),
+  closePrice: numeric('close_price', { precision: 12, scale: 2 }).notNull(),
+  limitUpPrice: numeric('limit_up_price', { precision: 12, scale: 2 }).notNull(),
+  changePct: numeric('change_pct', { precision: 10, scale: 4 }).notNull(),
+  limitRatio: numeric('limit_ratio', { precision: 4, scale: 2 }).notNull(),
+  consecutiveDays: integer('consecutive_days').notNull(),
+  volume: bigint('volume', { mode: 'number' }),
+  amount: numeric('amount', { precision: 16, scale: 2 }),
+  isFirstBoard: boolean('is_first_board').default(false).notNull(),
+  boardTag: varchar('board_tag', { length: 50 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  uniq: unique().on(table.code, table.date),
+  dateIdx: index('idx_limit_up_date').on(table.date),
+  consecutiveIdx: index('idx_limit_up_consecutive').on(table.consecutiveDays),
+  codeIdx: index('idx_limit_up_code').on(table.code),
+}))
+
+export const exportTasks = pgTable('export_tasks', {
+  id: serial('id').primaryKey(),
+  userId: varchar('user_id', { length: 50 }),
+  type: varchar('type', { length: 20 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  params: jsonb('params').default('{}').notNull(),
+  progress: integer('progress').default(0),
+  filePath: varchar('file_path', { length: 500 }),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+}, (table) => ({
+  userIdx: index('idx_export_user').on(table.userId),
+  statusIdx: index('idx_export_status').on(table.status),
+}))
+
+// ============================================================
+// Paper Trading — AI 模拟炒股比赛
+// ============================================================
+
+export const paperCompetitions = pgTable('paper_competitions', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 200 }).notNull(),
+  status: varchar('status', { length: 20 }).default('pending').notNull(),
+  initialCash: decimal('initial_cash', { precision: 16, scale: 2 }).default('1000000').notNull(),
+  maxPositionRatio: decimal('max_position_ratio', { precision: 4, scale: 2 }).default('0.30').notNull(),
+  dailyTradeLimit: integer('daily_trade_limit').default(3).notNull(),
+  startedAt: timestamp('started_at'),
+  finishedAt: timestamp('finished_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const paperAccounts = pgTable('paper_accounts', {
+  id: serial('id').primaryKey(),
+  competitionId: integer('competition_id').references(() => paperCompetitions.id),
+  agentId: varchar('agent_id', { length: 50 }).unique().notNull(),
+  agentName: varchar('agent_name', { length: 200 }).notNull(),
+  apiKey: varchar('api_key', { length: 100 }).unique().notNull(),
+  cash: decimal('cash', { precision: 16, scale: 2 }).default('1000000').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  competitionIdx: index('idx_paper_account_competition').on(table.competitionId),
+}))
+
+export const paperPositions = pgTable('paper_positions', {
+  id: serial('id').primaryKey(),
+  accountId: integer('account_id').references(() => paperAccounts.id).notNull(),
+  code: varchar('code', { length: 10 }).notNull(),
+  name: varchar('name', { length: 100 }),
+  shares: integer('shares').notNull(),
+  avgCost: decimal('avg_cost', { precision: 12, scale: 4 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  accountCodeIdx: unique('idx_paper_position_account_code').on(table.accountId, table.code),
+}))
+
+export const paperOrders = pgTable('paper_orders', {
+  id: serial('id').primaryKey(),
+  accountId: integer('account_id').references(() => paperAccounts.id).notNull(),
+  competitionId: integer('competition_id').references(() => paperCompetitions.id).notNull(),
+  code: varchar('code', { length: 10 }).notNull(),
+  name: varchar('name', { length: 100 }),
+  direction: varchar('direction', { length: 4 }).notNull(), // BUY / SELL
+  price: decimal('price', { precision: 12, scale: 4 }).notNull(),
+  shares: integer('shares').notNull(),
+  filledPrice: decimal('filled_price', { precision: 12, scale: 4 }),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING / FILLED / REJECTED / CANCELLED
+  rejectReason: text('reject_reason'),
+  filledAt: timestamp('filled_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  accountIdx: index('idx_paper_order_account').on(table.accountId),
+  competitionIdx: index('idx_paper_order_competition').on(table.competitionId),
+  statusIdx: index('idx_paper_order_status').on(table.status),
+}))
+
+export const paperNavSnapshots = pgTable('paper_nav_snapshots', {
+  id: serial('id').primaryKey(),
+  accountId: integer('account_id').references(() => paperAccounts.id).notNull(),
+  competitionId: integer('competition_id').references(() => paperCompetitions.id).notNull(),
+  nav: decimal('nav', { precision: 12, scale: 6 }).notNull(),
+  totalValue: decimal('total_value', { precision: 16, scale: 4 }).notNull(),
+  snapshotDate: date('snapshot_date').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  accountDateIdx: unique('idx_paper_nav_account_date').on(table.accountId, table.snapshotDate),
+}))

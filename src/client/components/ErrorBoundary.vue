@@ -55,17 +55,17 @@ p {
   font-size: 14px;
   color: var(--text-secondary, #aaa);
   margin: 0 0 20px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   padding: 8px 12px;
   background: rgba(239,68,68,0.1);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .reload-btn {
   padding: 10px 24px;
   background: var(--brand, #f59e0b);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 700;
   color: #000;

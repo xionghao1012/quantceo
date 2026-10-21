@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { eq, and, between, inArray, sql } from 'drizzle-orm'
+import { eq, and, between, inArray, sql, like, or } from 'drizzle-orm'
 import { db } from '../db/db.js'
 import { stocks, klines, strategies } from '../db/schema.js'
 import { getOrFetchKlines, getOrFetchMinuteKlines } from '../data/cache.js'
@@ -18,6 +18,23 @@ router.get('/', async (req, res) => {
   const result = await db.select().from(stocks)
     .where(q ? eq(stocks.code, q) : undefined)
     .limit(limit).offset(offset)
+  res.json(result)
+})
+
+// 股票搜索，支持代码或名称模糊匹配
+router.get('/search', async (req, res) => {
+  const q = (req.query.q as string || '').trim()
+  if (!q) return res.json([])
+  const limit = Math.min(Number(req.query.limit) || 20, 50)
+  const result = await db.select({ code: stocks.code, name: stocks.name, exchange: stocks.exchange })
+    .from(stocks)
+    .where(
+      or(
+        like(stocks.code, `%${q}%`),
+        like(stocks.name, `%${q}%`),
+      )
+    )
+    .limit(limit)
   res.json(result)
 })
 
@@ -121,7 +138,7 @@ router.get('/:code/klines', async (req, res) => {
     return res.json({ klines, source: result.source, period })
   }
 
-  let rows = await db.select().from(klines)
+  const rows = await db.select().from(klines)
     .where(and(
       eq(klines.code, code),
       start ? between(klines.date, start, end || '20500101') : undefined
@@ -222,6 +239,13 @@ router.get('/intl/:market/:code/indicators', async (req, res) => {
   } catch (e: any) {
     res.status(404).json({ error: e.message || 'Failed to fetch data' })
   }
+})
+
+router.get('/:code', async (req, res) => {
+  const code = req.params.code as string
+  const result = await db.select().from(stocks).where(eq(stocks.code, code)).limit(1)
+  if (result.length === 0) return res.status(404).json({ error: 'Stock not found' })
+  res.json(result[0])
 })
 
 export default router

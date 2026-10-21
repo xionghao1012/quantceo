@@ -1,16 +1,28 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import compression from 'compression'
+import http from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { registerPlugins } from './plugin.js'
+import { registerPlugins, asyncRouter } from './plugin.js'
 import { corePlugin } from './plugins/core.js'
+import { metricsMiddleware, createMetricsRouter } from './middleware/metrics.js'
+import { initWebSocket } from './services/wsServer.js'
+import { AppError } from './middleware/errors.js'
+import { pool } from './db/db.js'
+import { redis } from './data/redis.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const SERVICE_NAME = 'quant-trading'
 
 const app = express()
+
+app.set('trust proxy', 1)
+
+app.use(metricsMiddleware(SERVICE_NAME))
 
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -35,7 +47,7 @@ const limiter = rateLimit({
 })
 app.use('/api/', limiter)
 
-const distDir = path.resolve(__dirname, '../client')
+const distDir = path.resolve(__dirname, '../../dist/client')
 app.use(express.static(distDir, { index: false, maxAge: '1y', immutable: true }))
 
 // API routes via plugins
@@ -59,6 +71,30 @@ registerPlugins(app, plugins)
 const { startScheduler } = await import('./services/scheduler.js')
 startScheduler()
 
+// Start money flow real-time feed
+const { startRealtime } = await import('./services/moneyFlowService.js')
+try {
+  startRealtime()
+} catch (e: any) {
+  console.warn('[MoneyFlow] Failed to start real-time feed:', e.message)
+}
+
+// Start money flow alert engine
+const { startAlertEngine } = await import('./services/moneyFlowAlertEngine.js')
+try {
+  startAlertEngine()
+} catch (e: any) {
+  console.warn('[MoneyFlowAlert] Failed to start alert engine:', e.message)
+}
+
+// Start composite signal alert engine
+const { startCompositeAlertEngine } = await import('./services/compositeAlertEngine.js')
+try {
+  startCompositeAlertEngine()
+} catch (e: any) {
+  console.warn('[CompositeAlert] Failed to start:', e.message)
+}
+
 // Evaluate predictions on startup (Pro only)
 const today = new Date().toISOString().slice(0, 10)
 try {
@@ -66,13 +102,36 @@ try {
   evaluatePredictions(today).catch(() => {})
 } catch { /* Predict module not available in OSS */ }
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() })
+app.get('/api/health', async (_req, res) => {
+  let pgOk = false, redisOk = false
+  try {
+    await pool.query('SELECT 1')
+    pgOk = true
+  } catch {}
+  try {
+    await redis.ping()
+    redisOk = true
+  } catch {}
+  res.json({
+    status: pgOk && redisOk ? 'ok' : 'degraded',
+    service: SERVICE_NAME,
+    uptime: process.uptime(),
+    dependencies: { postgres: pgOk, redis: redisOk },
+    license: process.env.LICENSE_KEY ? 'pro' : 'free',
+  })
 })
 
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Error:', err)
-  res.status(500).json({ error: err.message || String(err) })
+app.use('/metrics', asyncRouter(createMetricsRouter()))
+
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err)
+  const statusCode = err instanceof AppError ? err.statusCode : 500
+  const code = err instanceof AppError ? err.code : 'INTERNAL_ERROR'
+  const message = err instanceof AppError ? err.message : '服务器内部错误'
+  if (statusCode >= 500) {
+    console.error(`[ERROR] ${err.stack || err.message || err}`)
+  }
+  res.status(statusCode).json({ error: message, code })
 })
 
 app.get('*', (req, res) => {
@@ -84,8 +143,35 @@ app.get('*', (req, res) => {
 })
 
 const PORT = Number(process.env.PORT) || 3001
-app.listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(app)
+initWebSocket(server)
+// 上一个进程刚退出时端口可能还没释放（TIME_WAIT / 旧进程还没退干净），
+// 直接 listen 会 EADDRINUSE 撞死，白白等一次重启
+let listenRetries = 0
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE' && listenRetries < 10) {
+    listenRetries++
+    console.warn(`[server] 端口 ${PORT} 被占用，1.5 秒后重试（第 ${listenRetries} 次）`)
+    setTimeout(() => server.listen(PORT, '0.0.0.0'), 1500)
+    return
+  }
+  console.error('[server] listen error:', err)
+  process.exit(1)
+})
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`)
+})
+
+// 兜底：请求路径里的 rejection 已经被 asyncRouter 转给错误中间件（返回 500），
+// 但后台任务（调度器 / SSE / 定时器）里的 rejection 仍会变成 unhandledRejection，
+// Node 24 默认直接退出进程——生产是单进程部署，那等于一次全站宕机。
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandled rejection:', reason)
+})
+// 未捕获异常后进程状态不可信，退出让 docker（restart=always）或开发守护脚本拉起
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaught exception:', err)
+  process.exit(1)
 })
 
 export default app

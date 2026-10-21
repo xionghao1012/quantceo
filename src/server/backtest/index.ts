@@ -6,7 +6,7 @@ const COMMISSION_RATE = 0.00025
 const STAMP_TAX = 0.001
 const SLIPPAGE = 0.001
 
-function calcWarmup(needed: Set<string>): number {
+export function calcWarmup(needed: Set<string>): number {
   let w = 30
   for (const ind of needed) {
     const m = ind.match(/^ma(\d+)$/)

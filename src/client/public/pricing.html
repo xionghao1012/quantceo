@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="QuantCEO 定价页面 - Free 免费版和 Pro 专业版年度订阅。明确的价格、退款政策和税费说明。Pro 版年付 CN¥299，含 AI 策略发现、风险控制、高级选股等功能。" />
+  <meta name="keywords" content="QuantCEO 定价, Pro 订阅, A股量化, AI 策略, 价格" />
+  <title>定价 - QuantCEO | A股量化交易辅助决策系统</title>
+  <link rel="canonical" href="https://quant.rpaui.com/pricing" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #0b0d14; color: #e8eaed; line-height: 1.6; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
+    h1 { font-size: 32px; margin: 0 0 8px; text-align: center; }
+    h2 { font-size: 22px; margin: 32px 0 16px; }
+    .subtitle { text-align: center; color: #999; margin: 0 0 32px; }
+    .plans { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; max-width: 800px; margin: 0 auto 32px; }
+    @media (max-width: 700px) { .plans { grid-template-columns: 1fr; } }
+    .plan { background: #161a28; border: 1px solid #23263a; border-radius: 12px; padding: 28px 24px; }
+    .plan.featured { border-color: #f59e0b; }
+    .plan-name { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+    .plan-desc { font-size: 13px; color: #999; margin: 0 0 20px; }
+    .plan-price { font-size: 36px; font-weight: 800; margin: 0 0 4px; }
+    .plan-price .currency { font-size: 18px; font-weight: 600; color: #ccc; }
+    .plan-price .unit { font-size: 14px; color: #999; font-weight: 400; }
+    .plan-billing { font-size: 12px; color: #999; margin: 0 0 20px; }
+    .plan ul { list-style: none; padding: 0; margin: 0 0 20px; }
+    .plan li { padding: 6px 0; font-size: 14px; color: #ccc; }
+    .plan li::before { content: "✓ "; color: #10b981; font-weight: 700; }
+    .plan li.no::before { content: "— "; color: #555; }
+    .plan li.no { color: #666; }
+    .badge { display: inline-block; background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 12px; margin-bottom: 12px; }
+    .notice { background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 6px; font-size: 13px; color: #fbbf24; margin: 16px 0; }
+    .legal { background: #161a28; border: 1px solid #23263a; border-radius: 8px; padding: 20px; margin: 20px 0; font-size: 13px; }
+    .legal h3 { margin: 0 0 8px; font-size: 14px; color: #f59e0b; }
+    .legal p { margin: 4px 0; color: #999; }
+    .nav { text-align: center; padding: 16px; background: #161a28; border-bottom: 1px solid #23263a; font-size: 13px; }
+    .nav a { color: #4fc3f7; text-decoration: none; margin: 0 12px; }
+    .nav a:hover { text-decoration: underline; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #666; border-top: 1px solid #23263a; margin-top: 40px; }
+    .footer a { color: #4fc3f7; text-decoration: none; margin: 0 6px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #23263a; }
+    th { background: #161a28; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="/">首页</a> ·
+    <a href="/upgrade">立即升级</a> ·
+    <a href="/terms">服务条款</a> ·
+    <a href="/privacy">隐私政策</a> ·
+    <a href="/refund-policy">退款政策</a> ·
+    <a href="mailto:435541900@qq.com">联系我们</a>
+  </nav>
+
+  <div class="container">
+    <h1>QuantCEO 定价</h1>
+    <p class="subtitle">选择适合你的套餐，让 AI 驱动的量化分析助你在 A 股市场脱颖而出</p>
+
+    <div class="notice">
+      <strong>重要提示：</strong>QuantCEO 不构成投资建议。所有数据、指标、AI 预测、信号仅供研究参考。投资有风险，决策需谨慎。详见
+      <a href="/terms" style="color:#fbbf24">服务条款</a>。
+    </div>
+
+    <div class="plans">
+      <div class="plan">
+        <h2 class="plan-name">Free 免费版</h2>
+        <p class="plan-desc">入门量化，体验核心功能</p>
+        <div class="plan-price">
+          <span class="currency">¥</span><span>0</span><span class="unit"> / 永久</span>
+        </div>
+        <p class="plan-billing">无需付费，注册即用</p>
+        <ul>
+          <li>行情看板</li>
+          <li>基础选股筛选</li>
+          <li>自选股 10 只</li>
+          <li>信号扫描（日 3 次）</li>
+          <li>策略回测（日 1 次）</li>
+          <li>指标排行</li>
+          <li>社区支持</li>
+          <li class="no">AI 策略发现</li>
+          <li class="no">风险控制工具</li>
+          <li class="no">高级选股 Pro</li>
+          <li class="no">实时异动监控</li>
+        </ul>
+      </div>
+
+      <div class="plan featured">
+        <div class="badge">最受欢迎</div>
+        <h2 class="plan-name">Pro 专业版</h2>
+        <p class="plan-desc">专业量化，解锁全部功能</p>
+        <div class="plan-price">
+          <span class="currency">¥</span><span>299</span><span class="unit"> / 年</span>
+        </div>
+        <p class="plan-billing">年付一次，平均每月 ¥24.9</p>
+        <ul>
+          <li>包含 Free 版全部功能</li>
+          <li>行情看板 + 历史 K 线</li>
+          <li>自选股 100 只</li>
+          <li>信号扫描（日 20 次）</li>
+          <li>策略回测（日 20 次）</li>
+          <li>优先客服支持</li>
+          <li><strong>AI 策略发现</strong>（独家）</li>
+          <li><strong>风险控制工具</strong>（独家）</li>
+          <li><strong>高级选股 Pro</strong>（独家）</li>
+          <li><strong>实时异动监控</strong>（独家）</li>
+          <li>盘中异动 + 推送通知</li>
+        </ul>
+        <a href="/login" style="display:block;text-align:center;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;padding:12px;border-radius:8px;text-decoration:none">登录后升级 Pro</a>
+      </div>
+    </div>
+
+    <div class="plan" style="max-width:800px;margin:0 auto 32px;border-color:#8b5cf6">
+      <div class="badge" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)">企业级</div>
+      <h2 class="plan-name">Premium 旗舰版</h2>
+      <p class="plan-desc">为机构和高净值用户打造，含 API 接入和专属服务</p>
+      <div class="plan-price">
+        <span class="currency">¥</span><span>23,992</span><span class="unit"> / 年</span>
+      </div>
+      <p class="plan-billing">年付一次，平均每月 ¥1,999。可联系客服申请定制方案。</p>
+      <ul>
+        <li>包含 Pro 版全部功能</li>
+        <li>无限次回测和信号扫描</li>
+        <li><strong>API 接入</strong>（程序化交易）</li>
+        <li>自选股 500 只</li>
+        <li>实时推送（微信 + App）</li>
+        <li>AI 策略推荐（每日更新）</li>
+        <li>优先体验新功能</li>
+        <li>定制化数据接入（可协商）</li>
+      </ul>
+      <a href="mailto:435541900@qq.com?subject=Premium 咨询" style="display:block;text-align:center;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;font-weight:700;padding:12px;border-radius:8px;text-decoration:none">联系销售咨询 Premium</a>
+    </div>
+
+    <h2>价格说明</h2>
+    <div class="legal">
+      <h3>价格与税费</h3>
+      <p>Pro 版价格为 <strong>CN¥299 / 年</strong>（人民币，含税）。可能需要缴纳税费，税费将在结账时计算。</p>
+      <p>当前显示价格为人民币（CNY）。支付通过 Paddle（paddle.com）处理，结算时按当时汇率换算。</p>
+    </div>
+
+    <div class="legal">
+      <h3>无自动续费</h3>
+      <p>Pro 订阅为年付订阅，<strong>不开启自动续费</strong>。订阅到期后会自动降级为 Free 版，如需继续使用 Pro 功能需手动续订。</p>
+    </div>
+
+    <div class="legal">
+      <h3>试用期与折扣</h3>
+      <p>当前不提供免费试用。如有折扣活动会在首页公告，折扣结束后将按原价 ¥299/年 续订。</p>
+    </div>
+
+    <div class="legal">
+      <h3>退款政策</h3>
+      <p>Pro 版提供 <strong>7 天无理由退款</strong>。购买后 7 天内如对服务不满意可申请全额退款。详见 <a href="/refund-policy" style="color:#4fc3f7">退款政策</a>。</p>
+    </div>
+
+    <h2>功能对比</h2>
+    <table>
+      <thead>
+        <tr><th>功能</th><th>Free</th><th>Pro (¥299/年)</th><th>Premium (¥23,992/年)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>行情看板</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>选股筛选</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>指标排行</td><td>✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>策略回测</td><td>1 次/日</td><td>20 次/日</td><td>无限</td></tr>
+        <tr><td>信号扫描</td><td>3 次/日</td><td>20 次/日</td><td>无限</td></tr>
+        <tr><td>自选股上限</td><td>10 只</td><td>100 只</td><td>500 只</td></tr>
+        <tr><td>高级选股 Pro</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>因子回测</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>AI 策略发现</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>AI 预测</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>策略优化</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>风险管理</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>仓位计算</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>止损优化</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>交易日志</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>持仓管理</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>智能调仓</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>每日精选</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>情绪指标</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>盘中异动</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>实时异动监控</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td>推送通知</td><td>—</td><td>✓</td><td>✓</td></tr>
+        <tr><td><strong>API 接入</strong></td><td>—</td><td>—</td><td>✓</td></tr>
+        <tr><td><strong>优先新功能</strong></td><td>—</td><td>—</td><td>✓</td></tr>
+        <tr><td><strong>定制数据接入</strong></td><td>—</td><td>—</td><td>可协商</td></tr>
+        <tr><td>客服支持</td><td>社区</td><td>优先</td><td>邮件支持</td></tr>
+      </tbody>
+    </table>
+
+    <h2>常见问题</h2>
+    <h3 style="font-size:16px;margin-top:16px">如何升级 Pro？</h3>
+    <p>点击上方"立即升级 Pro"按钮，将跳转至 Paddle 支付页面完成订阅。当前仅支持年付（CN¥299/年）。</p>
+
+    <h3 style="font-size:16px;margin-top:16px">可以按月付费吗？</h3>
+    <p>目前仅支持年付套餐，年付可享受更优惠的价格（平均每月 ¥24.9）。我们正在规划月付选项。</p>
+
+    <h3 style="font-size:16px;margin-top:16px">升级后功能多久生效？</h3>
+    <p>支付成功后立即生效，所有 Pro 功能即刻解锁，无需刷新页面。</p>
+
+    <h3 style="font-size:16px;margin-top:16px">支持退款吗？</h3>
+    <p>购买 Pro 后 7 天内可无条件退款。如对产品不满意，可联系 <a href="mailto:435541900@qq.com" style="color:#4fc3f7">435541900@qq.com</a> 处理。</p>
+
+    <h3 style="font-size:16px;margin-top:16px">Pro 价格会变吗？</h3>
+    <p>我们保留调整价格的权利。价格变更将在新订阅周期生效，<strong>不追溯已订阅用户</strong>。</p>
+
+    <h3 style="font-size:16px;margin-top:16px">Premium 版和 Pro 版有什么区别？</h3>
+    <p>Premium 版（CN¥23,992/年）面向机构和高净值用户，在 Pro 版基础上额外提供：<strong>API 接入（程序化交易）、500 只自选股、无限回测、优先新功能、定制数据接入</strong>。如需了解详情，请联系 <a href="mailto:435541900@qq.com" style="color:#4fc3f7">435541900@qq.com</a>。</p>
+
+    <div class="notice" style="margin-top:32px">
+      <strong>运营方信息：</strong>QuantCEO 由个人开发者 <strong>XIONG HAO</strong> 运营。
+      支付由 Paddle（paddle.com）作为 Merchant of Record 处理。
+      联系方式：<a href="mailto:435541900@qq.com" style="color:#fbbf24">435541900@qq.com</a>
+    </div>
+  </div>
+
+  <footer class="footer">
+    © 2026 QuantCEO · 由 XIONG HAO 运营 ·
+    <a href="/terms">服务条款</a> ·
+    <a href="/privacy">隐私政策</a> ·
+    <a href="/refund-policy">退款政策</a> ·
+    <a href="mailto:435541900@qq.com">联系我们</a>
+  </footer>
+</body>
+</html>

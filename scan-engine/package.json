@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Signal scan microservice — strategy-based technical scanning with worker pool",
+  "description": "Signal scan microservice \u2014 strategy-based technical scanning with worker pool",
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
     "build": "npx tsc",
-    "start": "node dist/server/index.js"
+    "start": "node dist/server/index.js",
+    "typecheck": "npx tsc --noEmit"
   },
   "dependencies": {
     "cors": "^2.8.6",

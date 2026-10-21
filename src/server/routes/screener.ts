@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db/db.js'
-import { stocks, klines } from '../db/schema.js'
-import { eq, desc, sql } from 'drizzle-orm'
+import { stocks, klines, moneyFlowDaily } from '../db/schema.js'
+import { eq, desc, sql, and, gte } from 'drizzle-orm'
 import { calcMA, calcMACD, calcRSI } from '../indicators/index.js'
 
 const router = Router()
@@ -20,7 +20,12 @@ const SCREENER_FIELDS = [
   { field: 'macdSignal', label: 'MACD信号', type: 'number', operators: ['>', '<', '=='] },
   { field: 'macdHistogram', label: 'MACD柱', type: 'number', operators: ['>', '<', '=='] },
   { field: 'rsi', label: 'RSI', type: 'number', operators: ['>', '<', '=='] },
+  // 资金流字段
+  { field: 'moneyInflowSum', label: '近N日净流入总额', type: 'money_flow', operators: ['>', '<', '=='] },
+  { field: 'moneyInflowPctAvg', label: '近N日净流入率均值', type: 'money_flow', operators: ['>', '<', '=='] },
 ]
+
+const MONEY_FLOW_FIELDS = new Set(['moneyInflowSum', 'moneyInflowPctAvg'])
 
 const ALLOWED_FIELDS = new Set(SCREENER_FIELDS.map(f => f.field))
 
@@ -34,15 +39,29 @@ interface Condition {
   value: number | string | [number, number]
 }
 
+interface MoneyFlowCondition {
+  field: 'moneyInflowSum' | 'moneyInflowPctAvg'
+  operator: '>' | '<' | '=='
+  value: number
+  window: 5 | 10 | 20
+}
+
 router.post('/', async (req, res) => {
-  const { conditions = [], sort = { field: 'change', order: 'desc' }, page = 1, limit = 50 } = req.body as {
+  const {
+    conditions = [],
+    moneyFlowConditions = [],
+    sort = { field: 'change', order: 'desc' },
+    page = 1,
+    limit = 50,
+  } = req.body as {
     conditions?: Condition[]
+    moneyFlowConditions?: MoneyFlowCondition[]
     sort?: { field: string; order: 'asc' | 'desc' }
     page?: number
     limit?: number
   }
 
-  if (!conditions.length) {
+  if (!conditions.length && !moneyFlowConditions.length) {
     return res.status(400).json({ error: 'At least one condition is required' })
   }
 
@@ -57,6 +76,38 @@ router.post('/', async (req, res) => {
 
   const effectiveLimit = Math.min(Number(limit) || 50, 100)
   const effectivePage = Math.max(Number(page) || 1, 1)
+
+  // 预计算资金流聚合数据（取最长窗口）
+  const maxWindow = moneyFlowConditions.length
+    ? Math.max(...moneyFlowConditions.map(c => c.window)) : 0
+
+  const moneyFlowMap: Record<string, { sum: number; pctAvg: number; days: number; dailyFlows: number[] }> = {}
+  if (moneyFlowConditions.length > 0 && maxWindow > 0) {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - maxWindow)
+    const cutoffStr = cutoff.toISOString().split('T')[0]
+
+    const rows = await db
+      .select({
+        code: moneyFlowDaily.code,
+        netInflowMain: sql`sum(${moneyFlowDaily.netInflowMain}::numeric)`,
+        netInflowMainPct: sql`avg(${moneyFlowDaily.netInflowMainPct}::numeric)`,
+        count: sql`count(*)`,
+        dailyFlows: sql`array_agg(${moneyFlowDaily.netInflowMain}::numeric ORDER BY ${moneyFlowDaily.tradeDate})`,
+      })
+      .from(moneyFlowDaily)
+      .where(gte(moneyFlowDaily.tradeDate, cutoffStr))
+      .groupBy(moneyFlowDaily.code)
+
+    for (const r of rows) {
+      moneyFlowMap[r.code] = {
+        sum: Number(r.netInflowMain) || 0,
+        pctAvg: Number(r.netInflowMainPct) || 0,
+        days: Number(r.count) || 0,
+        dailyFlows: (r.dailyFlows as number[]) || [],
+      }
+    }
+  }
 
   const stockRows = await db.select().from(stocks)
   const stockMap: Record<string, string> = {}
@@ -167,6 +218,21 @@ router.post('/', async (req, res) => {
               const [min, max] = cond.value as [number, number]
               if ((val as number) < min || (val as number) > max) return null
             }
+          }
+
+          // 应用资金流条件
+          for (const mc of moneyFlowConditions) {
+            const mf = moneyFlowMap[code]
+            if (!mf) return null
+            // 取对应窗口的数据
+            const windowFlows = mf.dailyFlows.slice(-mc.window)
+            const mfVal = mc.field === 'moneyInflowSum'
+              ? windowFlows.reduce((s, v) => s + v, 0)
+              : (windowFlows.length > 0 ? windowFlows.reduce((s, v) => s + v, 0) / windowFlows.length : 0)
+            const threshold = mc.value
+            if (mc.operator === '>' && mfVal <= threshold) return null
+            if (mc.operator === '<' && mfVal >= threshold) return null
+            if (mc.operator === '==' && Math.abs(mfVal - threshold) > 0.001) return null
           }
 
           return {

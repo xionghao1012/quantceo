@@ -26,10 +26,6 @@ const STRATEGY_DEFS: Record<string, { label: string; desc: string; icon: string 
   extreme_oversold: { label: '极度超卖', desc: 'RSI<20 + 缩量', icon: '▼' },
 }
 
-const isRecommended = computed(() => {
-  return (key: string) => recommendation.value?.strategyKey === key
-})
-
 const sortedStrategies = computed(() => {
   if (!strategies.value.length) return []
   return strategies.value.map(s => {
@@ -131,7 +127,7 @@ onMounted(fetchResults)
   <div class="backtest-view">
     <div class="page-header">
       <div>
-        <h1>📉 策略回测分析<TermTip term="strategyBacktest" /></h1>
+        <h1>策略回测分析<TermTip term="strategyBacktest" /></h1>
         <p class="subtitle">对6个评分策略做全历史回测（含交易成本、持仓模拟、净值跟踪）</p>
       </div>
       <div class="header-actions">
@@ -328,7 +324,7 @@ onMounted(fetchResults)
 }
 .rec-badge {
   padding: 3px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--brand-gradient);
   color: #0b0d14;
   font-weight: 700;
@@ -375,7 +371,7 @@ onMounted(fetchResults)
   color: #0b0d14;
   font-size: 10px;
   font-weight: 700;
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 }
 
 .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -430,7 +426,7 @@ onMounted(fetchResults)
 
 .equity-chart { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
 .chart-line { display: flex; align-items: flex-end; gap: 2px; height: 120px; }
-.chart-bar { flex: 1; background: var(--brand-gradient); border-radius: 1px 1px 0 0; min-height: 2px; }
+.chart-bar { flex: 1; background: var(--brand-gradient); border-radius: var(--radius-xs) var(--radius-xs) 0 0; min-height: 2px; }
 .chart-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-tertiary); margin-top: 4px; }
 
 .holding-periods { margin-bottom: 20px; }
@@ -467,7 +463,7 @@ onMounted(fetchResults)
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
-.spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.6s linear infinite; }
+.spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--brand); border-radius: var(--radius-full); animation: spin 0.6s linear infinite; }
 
 .error-banner {
   padding: 10px 14px;

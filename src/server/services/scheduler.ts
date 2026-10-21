@@ -1,21 +1,26 @@
 import cron from 'node-cron'
-import { db } from '../db/db.js'
-import { stocks, signals, priceAlerts, dailyPicks, positions, dailyMetrics, recTracking } from '../db/schema.js'
-import { eq, and } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
+import { getStocksRepository } from '../repositories/IStocksRepository.js'
+import { getSignalsRepository } from '../repositories/ISignalsRepository.js'
+import { getDailyMetricsRepository } from '../repositories/IDailyMetricsRepository.js'
+import { getRecTrackingRepository } from '../repositories/IRecTrackingRepository.js'
+import { getSchedulerLogRepository } from '../repositories/ISchedulerLogRepository.js'
+import { getUsersRepository } from '../repositories/IUsersRepository.js'
+import { getPredictionsRepository } from '../repositories/IPredictionsRepository.js'
 import { getOrFetchKlines, getOrFetchMinuteKlines } from '../data/cache.js'
 import { scanStock } from '../scan/index.js'
-// Pro modules — loaded via require() for OSS compatibility
-import { sql } from 'drizzle-orm'
+import { db } from '../db/db.js'
+import { stocks, signals, priceAlerts, dailyPicks, positions } from '../db/schema.js'
+import { eq, and, desc } from 'drizzle-orm'
+import { computeLimitUpRecords } from './limitUp.js'
 import { calcRSI, calcMACD, calcMA, calcBollinger } from '../indicators/index.js'
 import type { KLine, MinutePeriod } from '../../shared/types.js'
 
 function loadProModules(): any {
   const mod = { __esModule: true } as any
-  // Dynamic imports — gracefully fail in OSS where Pro modules don't exist
   async function load(name: string, fnName: string) {
     try { const m = await import(name); mod[fnName] = m[fnName] } catch {}
   }
-  // Deferred loading — called when a cron job needs a Pro module
   let loaded = false
   mod._ensure = async () => {
     if (loaded) return
@@ -48,10 +53,9 @@ function getBoard(code: string, exchange: string): string {
   return 'hsb'
 }
 
-export async function computeDailyMetrics() {
-  const metricDate = new Date().toISOString().split('T')[0]
-
-  const allStocks = await db.select().from(stocks)
+export async function computeDailyMetrics(metricDate?: string): Promise<number> {
+  const finalDate = metricDate || new Date().toISOString().split('T')[0]
+  const allStocks = await getStocksRepository().findAll()
   const BATCH = 50
   let computed = 0
 
@@ -115,8 +119,8 @@ export async function computeDailyMetrics() {
 
         const board = getBoard(stock.code, stock.exchange)
 
-        await db.insert(dailyMetrics).values({
-          metricDate,
+        await getDailyMetricsRepository().upsert({
+          metricDate: finalDate,
           code: stock.code,
           name: stock.name,
           exchange: stock.exchange,
@@ -129,26 +133,96 @@ export async function computeDailyMetrics() {
           maAlignment: maAlign,
           volatility: String(Math.round(volatility * 1000000) / 1000000),
           momentum: String(Math.round(mom10 * 100) / 100),
-        }).onConflictDoUpdate({
-          target: [dailyMetrics.metricDate, dailyMetrics.code],
-          set: {
-            rsi: String(Math.round(lastRSI * 10) / 10),
-            changePct: String(Math.round(changePct * 100) / 100),
-            volRatio: String(Math.round(volRatio * 100) / 100),
-            macdSignal: String(Math.round(macdSignal * 100) / 100),
-            bbPosition: String(Math.round(bbPos * 10) / 10),
-            maAlignment: maAlign,
-            volatility: String(Math.round(volatility * 1000000) / 1000000),
-            momentum: String(Math.round(mom10 * 100) / 100),
-            computedAt: new Date(),
-          },
         })
         computed++
-      } catch {}
+      } catch (e: any) {}
     }))
     console.log(`[Metrics] ${Math.min(i + BATCH, allStocks.length)}/${allStocks.length}...`)
   }
   console.log(`[Scheduler] Daily metrics computed: ${computed}/${allStocks.length} stocks`)
+  return computed
+}
+
+async function signalScanForDate(scanDate: string): Promise<number> {
+  const allStocks = await getStocksRepository().findAll()
+  let signalsWritten = 0
+  const BATCH_SIZE = 50
+  for (let i = 0; i < allStocks.length; i += BATCH_SIZE) {
+    const chunk = allStocks.slice(i, i + BATCH_SIZE)
+    const results = await Promise.allSettled(
+      chunk.map(async (s) => {
+        try {
+          const cache = await getOrFetchKlines(s.code)
+          const scanned = scanStock(s.code, s.name, cache.klines)
+          if (!scanned) return null
+          return { s, scanned }
+        } catch { return null }
+      })
+    )
+    for (const result of results) {
+      if (result.status !== 'fulfilled' || !result.value) continue
+      const { s, scanned } = result.value
+      for (const sig of scanned.signals) {
+        try {
+          await getSignalsRepository().create({
+            code: s.code, name: s.name, scanDate,
+            strategyId: sig.strategyId, strategyName: sig.strategyName,
+            direction: sig.direction, strength: sig.strength,
+            price: String(scanned.price), reason: `${sig.strategyName} ${sig.direction}`,
+          })
+          signalsWritten++
+        } catch {}
+      }
+    }
+  }
+  return signalsWritten
+}
+
+async function aiDailyPicksForDate(pickDate: string): Promise<number> {
+  await pro._ensure()
+  if (!pro.generateDailyPicks) return 0
+  const picks = await pro.generateDailyPicks()
+  if (picks.length === 0) return 0
+  for (const p of picks) {
+    const existing = await getRecTrackingRepository().findByCodeAndDate(p.code, pickDate)
+    if (!existing) {
+      await getRecTrackingRepository().create({ code: p.code, name: p.name, pickDate, status: 'pending' })
+    }
+  }
+  return picks.length
+}
+
+async function aiPredictionsForDate(predictDate: string): Promise<number> {
+  await pro._ensure()
+  const targetDate = new Date(predictDate + 'T00:00:00+08:00')
+  targetDate.setDate(targetDate.getDate() + 1)
+  const targetDateStr = targetDate.toISOString().split('T')[0]
+
+  const picks = pro.selectDailyPicks ? await pro.selectDailyPicks(30) : []
+  const proUsers = await getUsersRepository().findProUsers()
+  const allHoldings = new Set<string>()
+  for (const u of proUsers) {
+    const h = pro.getHoldings ? await pro.getHoldings(u.id) : []
+    h.forEach((c: any) => allHoldings.add(c))
+  }
+  picks.forEach((p: any) => allHoldings.add(p.code))
+
+  const { loadKlines, predictOne, savePrediction } = await import('../ai/predict.js')
+  const { getMoneyFlow5d } = await import('./moneyFlowService.js')
+  let ok = 0
+  for (const code of allHoldings) {
+    try {
+      const klines = await loadKlines(code, 90)
+      if (klines.length < 30) continue
+      const last = klines[klines.length - 1]
+      const mf5d = await getMoneyFlow5d(code)
+      const result = await predictOne({ code, name: picks.find((p: any) => p.code === code)?.name || code, klines, daysAhead: 1, mainNetInflow5d: mf5d?.netInflowMain })
+      await savePrediction(code, '', predictDate, targetDateStr, last.close, result)
+      ok++
+      await new Promise(r => setTimeout(r, 200))
+    } catch {}
+  }
+  return ok
 }
 
 async function checkPriceAlerts() {
@@ -257,21 +331,84 @@ async function checkPriceAlerts() {
   }
 }
 
+function today(): string { return new Date().toISOString().split('T')[0] }
+
+async function getLastRunDate(taskName: string): Promise<string | null> {
+  return getSchedulerLogRepository().findLastSuccess(taskName)
+}
+
+function getWeekdaysBetween(start: string, end: string): string[] {
+  const dates: string[] = []
+  const cur = new Date(start + 'T00:00:00+08:00')
+  const last = new Date(end + 'T00:00:00+08:00')
+  while (cur <= last) {
+    const day = cur.getDay()
+    if (day !== 0 && day !== 6) dates.push(cur.toISOString().split('T')[0])
+    cur.setDate(cur.getDate() + 1)
+  }
+  return dates
+}
+
+async function runWithCatchUp(
+  taskName: string,
+  fn: (execDate: string) => Promise<number>,
+  maxCatchUpDays = 10,
+) {
+  const todayStr = today()
+  const lastRun = await getLastRunDate(taskName)
+  const startDate = lastRun || todayStr
+  const missedDates = getWeekdaysBetween(startDate, todayStr).filter(d => d > (lastRun || ''))
+  const limit = Math.min(maxCatchUpDays, 30)
+
+  if (missedDates.length > limit) {
+    console.log(`[Scheduler] ${taskName}: too many missed (${missedDates.length}), catching up last ${limit}`)
+    missedDates.splice(0, missedDates.length - limit)
+  }
+
+  if (missedDates.length > 0) {
+    console.log(`[Scheduler] ${taskName}: catching up ${missedDates.length} missed days`)
+    for (const d of missedDates) {
+      await getSchedulerLogRepository().insertStart(taskName, d)
+      try {
+        const count = await fn(d)
+        await getSchedulerLogRepository().upsertEnd(taskName, d, count)
+        console.log(`[Scheduler] ${taskName} (${d}) done: ${count}`)
+      } catch (e: any) {
+        await getSchedulerLogRepository().upsertEnd(taskName, d, 0, e.message)
+        console.error(`[Scheduler] ${taskName} (${d}) failed: ${e.message}`)
+      }
+    }
+  } else {
+    console.log(`[Scheduler] ${taskName}: already up to date`)
+  }
+}
+
 export function startScheduler() {
-  const useExternal = process.env.USE_EXTERNAL_SCHEDULER === 'true'
+  const useExternal = !!(process.env as any).USE_EXTERNAL_SCHEDULER;
+  void useExternal;
+
+  // ---- On startup: catch up missed date-based tasks ----
+  (async () => {
+    try {
+      console.log('[Scheduler] Checking for missed tasks...')
+      await runWithCatchUp('daily_metrics', computeDailyMetrics, 10)
+      await runWithCatchUp('signal_scan', signalScanForDate, 10)
+      await runWithCatchUp('ai_daily_picks', aiDailyPicksForDate, 5)
+      await runWithCatchUp('ai_predictions', aiPredictionsForDate, 5)
+      console.log('[Scheduler] Catch-up check complete')
+    } catch (e: any) {
+      console.error('[Scheduler] Catch-up failed:', e.message)
+    }
+  })()
 
   if (useExternal) {
     console.log('[Scheduler] Using external scheduler — skipping cross-service cron jobs')
-    // Keep only intraday jobs (price alerts, anomaly checks)
     cron.schedule('*/5 9-15 * * 1-5', async () => { await checkPriceAlerts() })
     cron.schedule('*/5 9,10,11,13,14 * * 1-5', async () => {
       console.log('[Scheduler] Checking intraday anomalies...')
       try {
         const { checkIntradayAnomalies } = await import('../ai/intradayAlert.js')
-        const { db } = await import('../db/db.js')
-        const { users } = await import('../db/schema.js')
-        const { eq } = await import('drizzle-orm')
-        const proUsers = await db.select().from(users).where(eq(users.role, 'premium'))
+        const proUsers = await getUsersRepository().findProUsers()
         for (const user of proUsers) {
           try { await checkIntradayAnomalies(user.id) } catch {}
         }
@@ -283,7 +420,9 @@ export function startScheduler() {
 
   cron.schedule('0 18 * * 1-5', async () => {
     console.log('[Scheduler] Starting daily data update...')
-    const allStocks = await db.select().from(stocks)
+    const d = today()
+    await getSchedulerLogRepository().insertStart('daily_data', d)
+    const allStocks = await getStocksRepository().findAll()
     let updated = 0
     const BATCH_SIZE = 50
     for (let i = 0; i < allStocks.length; i += BATCH_SIZE) {
@@ -298,16 +437,19 @@ export function startScheduler() {
       )
       console.log(`[Scheduler] Data update: ${Math.min(i + BATCH_SIZE, allStocks.length)}/${allStocks.length}`)
     }
+    await getSchedulerLogRepository().upsertEnd('daily_data', d, updated)
     console.log(`[Scheduler] Data update complete. Updated: ${updated}/${allStocks.length}`)
   })
 
   cron.schedule('30 18 * * 1-5', async () => {
     console.log('[Scheduler] Starting daily signal scan...')
-    const allStocks = await db.select().from(stocks)
+    const allStocks = await getStocksRepository().findAll()
     const scanDate = new Date().toISOString().split('T')[0]
     let signalsWritten = 0
     let stocksScanned = 0
     const BATCH_SIZE = 50
+
+    await getSchedulerLogRepository().insertStart('signal_scan', scanDate)
 
     const stockChunks = []
     for (let i = 0; i < allStocks.length; i += BATCH_SIZE) {
@@ -335,7 +477,7 @@ export function startScheduler() {
 
         for (const sig of scanned.signals) {
           try {
-            await db.insert(signals).values({
+            await getSignalsRepository().create({
               code: s.code,
               name: s.name,
               scanDate,
@@ -344,9 +486,8 @@ export function startScheduler() {
               direction: sig.direction,
               strength: sig.strength,
               price: String(scanned.price),
-              indicators: {},
               reason: `${sig.strategyName} ${sig.direction}`,
-            }).onConflictDoNothing()
+            })
             signalsWritten++
           } catch {}
         }
@@ -357,9 +498,7 @@ export function startScheduler() {
     console.log(`[Scheduler] Signal scan complete. Scanned: ${stocksScanned}, Signals written: ${signalsWritten}`)
 
     if (signalsWritten > 0) {
-      const latestSignals = await db.select().from(signals)
-        .where(eq(signals.scanDate, scanDate))
-        .limit(100)
+      const latestSignals = await getSignalsRepository().findByDate(scanDate, 100)
       const signalItems = latestSignals.map(s => ({
         code: s.code,
         name: s.name,
@@ -374,6 +513,7 @@ export function startScheduler() {
       pro.dispatchPush && await pro.dispatchPush({ type: 'dailyDigest', signals: signalItems, digestText: `今日共扫描 ${stocksScanned} 只股票，产生 ${signalsWritten} 个信号` })
       console.log(`[Scheduler] Daily digest dispatched`)
     }
+    await getSchedulerLogRepository().upsertEnd('signal_scan', scanDate, signalsWritten)
   })
 
   cron.schedule('0 18 * * 5', async () => {
@@ -381,9 +521,7 @@ export function startScheduler() {
     const scanDate = new Date().toISOString().slice(0, 10)
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
 
-    const weekSignals = await db.select().from(signals)
-      .where(sql`${signals.scanDate} >= ${weekAgo} AND ${signals.scanDate} <= ${scanDate}`)
-      .limit(50)
+    const weekSignals = await getSignalsRepository().findByDateRange(weekAgo, scanDate, 50)
 
     const totalSignals = weekSignals.reduce((sum, s) => sum + (Number(s.strength) || 0), 0)
     const buySignals = weekSignals.filter(s => s.direction === 'BUY' || s.direction === '买入').length
@@ -453,26 +591,22 @@ export function startScheduler() {
 
   cron.schedule('0 8 * * 1-5', async () => {
     console.log('[Scheduler] Generating AI-powered daily picks...')
+    const d = today()
+    await getSchedulerLogRepository().insertStart('ai_daily_picks', d)
     try {
       const picks = pro.generateDailyPicks ? await pro.generateDailyPicks() : (console.log("[Scheduler] generateDailyPicks not available"), [])
       if (picks.length === 0) {
         console.log('[Scheduler] No AI picks today.')
+        await getSchedulerLogRepository().upsertEnd('ai_daily_picks', d, 0)
         return
       }
       console.log(`[Scheduler] AI daily picks generated: ${picks.length} stocks`)
 
-      const today = new Date().toISOString().slice(0, 10)
+      const todayStr = new Date().toISOString().slice(0, 10)
       for (const p of picks) {
-        const existing = await db.select({ id: recTracking.id }).from(recTracking)
-          .where(and(eq(recTracking.code, p.code), eq(recTracking.pickDate, today)))
-          .limit(1)
-        if (existing.length === 0) {
-          await db.insert(recTracking).values({
-            code: p.code,
-            name: p.name,
-            pickDate: today,
-            status: 'pending',
-          })
+        const existing = await getRecTrackingRepository().findByCodeAndDate(p.code, todayStr)
+        if (!existing) {
+          await getRecTrackingRepository().create({ code: p.code, name: p.name, pickDate: todayStr, status: 'pending' })
         }
       }
 
@@ -488,18 +622,38 @@ export function startScheduler() {
         })),
         digestText: `今日 AI 精选 ${picks.length} 只股票`,
       })
+      await getSchedulerLogRepository().upsertEnd('ai_daily_picks', d, picks.length)
       console.log('[Scheduler] Daily picks push dispatched')
-    } catch (e) {
+    } catch (e: any) {
+      await getSchedulerLogRepository().upsertEnd('ai_daily_picks', d, 0, e.message)
       console.error('[Scheduler] AI daily picks failed:', e)
     }
   })
 
   cron.schedule('30 15 * * 1-5', async () => {
     console.log('[Scheduler] Computing daily metrics...')
+    const d = today()
+    await getSchedulerLogRepository().insertStart('daily_metrics', d)
     try {
       await computeDailyMetrics()
-    } catch (e) {
+      await getSchedulerLogRepository().upsertEnd('daily_metrics', d, 1)
+    } catch (e: any) {
+      await getSchedulerLogRepository().upsertEnd('daily_metrics', d, 0, e.message)
       console.error('[Scheduler] Daily metrics failed:', e)
+    }
+  })
+
+  cron.schedule('30 15 * * 1-5', async () => {
+    console.log('[Scheduler] Computing limit-up records...')
+    const d = today()
+    await getSchedulerLogRepository().insertStart('limit_up', d)
+    try {
+      const written = await computeLimitUpRecords(d)
+      await getSchedulerLogRepository().upsertEnd('limit_up', d, written)
+      console.log(`[Scheduler] Limit-up records computed: ${written}`)
+    } catch (e: any) {
+      await getSchedulerLogRepository().upsertEnd('limit_up', d, 0, e.message)
+      console.error('[Scheduler] Limit-up computation failed:', e)
     }
   })
 
@@ -587,12 +741,10 @@ export function startScheduler() {
     console.log('[Scheduler] Generating AI predictions for top stocks...')
     try {
       const { selectDailyPicks, getHoldings, loadKlines, predictOne, savePrediction } = await import('../ai/predict.js')
-      const { db } = await import('../db/db.js')
-      const { users } = await import('../db/schema.js')
-      const { eq } = await import('drizzle-orm')
+      const { getMoneyFlow5d } = await import('./moneyFlowService.js')
 
       const picks = pro.selectDailyPicks ? await pro.selectDailyPicks(30) : []
-      const proUsers = await db.select().from(users).where(eq(users.role, 'premium'))
+      const proUsers = await getUsersRepository().findProUsers()
       const allHoldings = new Set<string>()
       for (const u of proUsers) {
         const h = pro.getHoldings ? await pro.getHoldings(u.id) : []
@@ -611,11 +763,13 @@ export function startScheduler() {
           const klines = await loadKlines(code, 90)
           if (klines.length < 30) continue
           const last = klines[klines.length - 1]
+          const mf5d = await getMoneyFlow5d(code)
           const result = await predictOne({
             code,
             name: picks.find((p: any) => p.code === code)?.name || code,
             klines,
             daysAhead: 1,
+            mainNetInflow5d: mf5d?.netInflowMain,
           })
           await savePrediction(code, '', today, targetDateStr, last.close, result)
           ok++
@@ -627,6 +781,21 @@ export function startScheduler() {
       console.log(`[Scheduler] AI predictions: ${ok} ok, ${fail} failed`)
     } catch (e: any) {
       console.error('[Scheduler] AI predictions failed:', e.message)
+    }
+  })
+
+  cron.schedule('15 15 * * 1-5', async () => {
+    console.log('[Scheduler] Starting money flow daily backfill...')
+    const d = today()
+    await getSchedulerLogRepository().insertStart('moneyflow_daily', d)
+    try {
+      const { backfillDaily } = await import('./moneyFlowService.js')
+      const count = await backfillDaily(5)
+      await getSchedulerLogRepository().upsertEnd('moneyflow_daily', d, count)
+      console.log(`[Scheduler] Money flow daily backfill: ${count} records`)
+    } catch (e: any) {
+      await getSchedulerLogRepository().upsertEnd('moneyflow_daily', d, 0, e.message)
+      console.error('[Scheduler] Money flow daily backfill failed:', e.message)
     }
   })
 
@@ -653,17 +822,10 @@ export function startScheduler() {
   cron.schedule('25 9 * * 1-5', async () => {
     console.log('[Scheduler] Pushing AI predictions digest...')
     try {
-      const { db } = await import('../db/db.js')
-      const { aiPredictions } = await import('../db/schema.js')
-      const { eq, and, desc } = await import('drizzle-orm')
       const { dispatchPush } = await import('./push/dispatcher.js')
 
       const today = new Date().toISOString().slice(0, 10)
-      const preds = await db.select()
-        .from(aiPredictions)
-        .where(eq(aiPredictions.predictDate, today))
-        .orderBy(desc(aiPredictions.confidence))
-        .limit(10)
+      const preds = await getPredictionsRepository().findByDate(today, 10)
 
       if (preds.length === 0) return
 
@@ -695,13 +857,12 @@ export function startScheduler() {
   cron.schedule('30 8 * * 1-5', async () => {
     console.log('[Scheduler] Analyzing position alerts...')
     try {
-      const { db } = await import('../db/db.js')
       const { users } = await import('../db/schema.js')
       const { eq } = await import('drizzle-orm')
       const { analyzeAllPositions } = await import('../ai/positionAlert.js')
       const { dispatchPush } = await import('./push/dispatcher.js')
 
-      const proUsers = await db.select().from(users).where(eq(users.role, 'premium'))
+      const proUsers = await getUsersRepository().findProUsers()
       for (const user of proUsers) {
         try {
           const alerts = await analyzeAllPositions(user.id)
@@ -732,10 +893,7 @@ export function startScheduler() {
     console.log('[Scheduler] Checking intraday anomalies...')
     try {
       const { checkIntradayAnomalies } = await import('../ai/intradayAlert.js')
-      const { db } = await import('../db/db.js')
-      const { users } = await import('../db/schema.js')
-      const { eq } = await import('drizzle-orm')
-      const proUsers = await db.select().from(users).where(eq(users.role, 'premium'))
+      const proUsers = await getUsersRepository().findProUsers()
       for (const user of proUsers) {
         try {
           await checkIntradayAnomalies(user.id)
@@ -743,6 +901,57 @@ export function startScheduler() {
       }
     } catch (e: any) {
       console.error('[Scheduler] Intraday anomaly check failed:', e.message)
+    }
+  })
+
+  // Paper Trading: 每日收盘后撮合 pending 订单（15:05 执行）
+  cron.schedule('5 15 * * 1-5', async () => {
+    console.log('[Scheduler] Running paper trading matching...')
+    try {
+      const { matchAllPendingOrders, snapshotAllAccounts } = await import('./paperTradingEngine.js')
+      const results = await matchAllPendingOrders()
+      await snapshotAllAccounts()
+      const filled = results.filter((r: any) => r.status === 'FILLED').length
+      const rejected = results.filter((r: any) => r.status === 'REJECTED').length
+      console.log(`[Scheduler] Paper trading: ${filled} filled, ${rejected} rejected`)
+    } catch (e: any) {
+      console.error('[Scheduler] Paper trading matching failed:', e.message)
+    }
+
+    // 每日复盘（撮合完成后，对每个 Agent 生成复盘分析）
+    console.log('[Scheduler] Running daily review for AI agents...')
+    try {
+      const { runDailyReview } = await import('./paperTradingAgent.js')
+      const reviews = await runDailyReview()
+      const ok = reviews.filter((r: any) => r.success).length
+      console.log(`[Scheduler] Daily review: ${ok}/${reviews.length} agents reviewed`)
+      for (const r of reviews) {
+        if (r.success) {
+          console.log(`[Scheduler]   ${r.agentName}: ${r.review.slice(0, 80).replace(/\n/g, ' ')}`)
+        } else {
+          console.log(`[Scheduler]   ${r.agentName}: FAILED - ${r.error}`)
+        }
+      }
+    } catch (e: any) {
+      console.error('[Scheduler] Daily review failed:', e.message)
+    }
+  })
+
+  // Paper Trading: 交易时段每 5 分钟让 AI Agent 做决策
+  cron.schedule('*/5 9,10,11,13,14 * * 1-5', async () => {
+    console.log('[Scheduler] Running paper trading AI agents...')
+    try {
+      const { runAllAgents } = await import('./paperTradingAgent.js')
+      const results = await runAllAgents()
+      const ok = results.filter((r: any) => r.success).length
+      console.log(`[Scheduler] AI agents: ${ok}/${results.length} succeeded`)
+      for (const r of results) {
+        if (r.trades?.length) {
+          console.log(`[Scheduler]   ${r.agentName}: ${r.trades.map((t: any) => `${t.direction} ${t.code}x${t.shares}[${t.result}]`).join(', ')}`)
+        }
+      }
+    } catch (e: any) {
+      console.error('[Scheduler] Paper trading agents failed:', e.message)
     }
   })
 

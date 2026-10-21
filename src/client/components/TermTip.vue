@@ -56,7 +56,6 @@ function updatePosition() {
   posStyle.value = { top: `${top}px`, left: `${left}px` }
 }
 
-let closeTimer: ReturnType<typeof setTimeout> | null = null
 
 function onClickOutside(e: MouseEvent) {
   if (tipRef.value && !tipRef.value.contains(e.target as Node)) {
@@ -126,7 +125,7 @@ onUnmounted(() => {
   justify-content: center;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--text-tertiary, #555);
   color: var(--bg, #0d0d0d);
   font-size: 10px;
@@ -143,7 +142,7 @@ onUnmounted(() => {
   max-width: calc(100vw - 16px);
   background: #1a1a1a;
   border: 1px solid var(--border, #444);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   z-index: 99999;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);

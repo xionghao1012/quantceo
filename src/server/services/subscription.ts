@@ -1,0 +1,1 @@
+export function activateSubscription(...args:any[]):any{return Promise.resolve(null)};export function cancelSubscription(...args:any[]):any{return Promise.resolve(null)};export function logPayment(...args:any[]):any{return Promise.resolve(null)}

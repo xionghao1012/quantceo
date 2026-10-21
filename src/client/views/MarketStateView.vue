@@ -64,7 +64,7 @@ onMounted(() => {
   <div class="market-state-view">
     <div class="page-header">
       <div>
-        <h1>🌡️ 市场状态</h1>
+        <h1>市场状态</h1>
         <p class="subtitle">基于指数技术指标判断当前市场状态，匹配适合的策略</p>
       </div>
       <select v-model="selectedIndex" class="index-select" @change="fetchState">
@@ -189,7 +189,7 @@ onMounted(() => {
   padding: 8px 12px;
   background: var(--bg, #0d0d0d);
   border: 1px solid var(--border, #333);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text-primary, #fff);
   font-size: 14px;
   cursor: pointer;
@@ -199,7 +199,7 @@ onMounted(() => {
   padding: 10px 16px;
   background: rgba(239,68,68,0.1);
   border: 1px solid rgba(239,68,68,0.3);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: #ef4444;
   font-size: 13px;
   margin-bottom: 16px;
@@ -218,7 +218,7 @@ onMounted(() => {
   width: 28px; height: 28px;
   border: 2px solid var(--border, #333);
   border-top-color: #f59e0b;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -229,7 +229,7 @@ onMounted(() => {
   gap: 16px;
   padding: 20px;
   border: 1px solid;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   margin-bottom: 16px;
 }
 
@@ -264,7 +264,7 @@ onMounted(() => {
 .ind-card {
   background: var(--bg, #0d0d0d);
   border: 1px solid var(--border, #333);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -293,7 +293,7 @@ onMounted(() => {
   padding: 6px 12px;
   background: rgba(245,158,11,0.15);
   border: 1px solid rgba(245,158,11,0.3);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #f59e0b;
   font-size: 12px;
   font-weight: 600;
@@ -306,7 +306,7 @@ onMounted(() => {
 .strategy-card {
   background: var(--bg, #0d0d0d);
   border: 1px solid var(--border, #333);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 12px 14px;
 }
 
@@ -322,7 +322,7 @@ onMounted(() => {
 .str-dir {
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-weight: 600;
 }
 
@@ -342,7 +342,7 @@ onMounted(() => {
   padding: 4px 10px;
   background: var(--brand, #f59e0b);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
   color: #000;

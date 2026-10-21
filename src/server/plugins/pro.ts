@@ -1,1 +1,1 @@
-export const proPlugin = undefined as any
+export const proPlugin = { name: 'pro', routes: [] }

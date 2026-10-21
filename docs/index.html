@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuantCEO 功能文档</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .container { display: flex; min-height: 100vh; }
+    .sidebar { width: 280px; background: #1e293b; border-right: 1px solid #334155; overflow-y: auto; position: fixed; height: 100vh; }
+    .sidebar-header { padding: 20px; border-bottom: 1px solid #334155; }
+    .sidebar-header h1 { font-size: 18px; font-weight: 600; color: #f8fafc; }
+    .sidebar-header p { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+    .nav-section { padding: 16px 0; }
+    .nav-title { padding: 8px 20px; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .nav-item { display: flex; align-items: center; padding: 10px 20px; cursor: pointer; transition: background 0.15s; font-size: 14px; }
+    .nav-item:hover { background: #334155; }
+    .nav-item.active { background: #3b82f6; color: #fff; }
+    .nav-item .badge { margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+    .badge-done { background: #166534; color: #86efac; }
+    .badge-pro { background: #7c2d12; color: #fdba74; }
+    .badge-quant { background: #4c1d95; color: #c4b5fd; }
+    .main { flex: 1; margin-left: 280px; padding: 32px 48px; max-width: 1200px; }
+    .doc-content { display: none; }
+    .doc-content.active { display: block; }
+    .doc-header { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #334155; }
+    .doc-header h1 { font-size: 28px; font-weight: 600; color: #f8fafc; margin-bottom: 8px; }
+    .doc-header .meta { display: flex; gap: 16px; font-size: 13px; color: #94a3b8; }
+    .doc-header .badge { padding: 4px 12px; border-radius: 6px; font-size: 12px; }
+    .doc-body { font-size: 15px; line-height: 1.7; }
+    .doc-body h2 { font-size: 20px; font-weight: 600; color: #f8fafc; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #334155; }
+    .doc-body h3 { font-size: 16px; font-weight: 600; color: #e2e8f0; margin: 24px 0 12px; }
+    .doc-body p { margin: 12px 0; color: #cbd5e1; }
+    .doc-body table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .doc-body th, .doc-body td { padding: 10px 12px; text-align: left; border: 1px solid #334155; }
+    .doc-body th { background: #1e293b; color: #e2e8f0; font-weight: 500; }
+    .doc-body td { color: #cbd5e1; }
+    .doc-body code { background: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #93c5fd; }
+    .doc-body pre { background: #1e293b; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 16px 0; }
+    .doc-body pre code { background: none; padding: 0; color: #e2e8f0; }
+    .doc-body ul, .doc-body ol { margin: 12px 0; padding-left: 24px; color: #cbd5e1; }
+    .doc-body li { margin: 6px 0; }
+    .empty-state { text-align: center; padding: 80px 40px; color: #64748b; }
+    .empty-state h2 { font-size: 20px; margin-bottom: 8px; color: #94a3b8; }
+    .toc { background: #1e293b; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+    .toc h3 { font-size: 14px; color: #94a3b8; margin-bottom: 12px; }
+    .toc ul { list-style: none; padding: 0; }
+    .toc li { margin: 6px 0; }
+    .toc a { color: #60a5fa; text-decoration: none; font-size: 14px; }
+    .toc a:hover { text-decoration: underline; }
+    @media (max-width: 768px) { .sidebar { width: 100%; height: auto; position: relative; } .main { margin-left: 0; padding: 20px; } .container { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <h1>QuantCEO 文档</h1>
+        <p>功能详细操作说明 · XIO-51~74</p>
+      </div>
+      <div class="nav-section">
+        <div class="nav-title">OSS 基础功能</div>
+        <div class="nav-item" data-doc="XIO-51"><span>XIO-51 行情看板</span><span class="badge badge-done">done</span></div>
+        <div class="nav-item" data-doc="XIO-52"><span>XIO-52 个股详情</span><span class="badge badge-done">done</span></div>
+        <div class="nav-item" data-doc="XIO-53"><span>XIO-53 策略回测</span><span class="badge badge-done">done</span></div>
+        <div class="nav-item" data-doc="XIO-54"><span>XIO-54 信号扫描</span><span class="badge badge-done">done</span></div>
+        <div class="nav-item" data-doc="XIO-55"><span>XIO-55 自选股</span><span class="badge badge-done">done</span></div>
+        <div class="nav-item" data-doc="XIO-56"><span>XIO-56 选股筛选器</span><span class="badge badge-done">done</span></div>
+        <div class="nav-item" data-doc="XIO-57"><span>XIO-57 指标排行</span><span class="badge badge-done">done</span></div>
+        <div class="nav-item" data-doc="XIO-58"><span>XIO-58 市场状态</span><span class="badge badge-done">done</span></div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-title">Pro 付费功能</div>
+        <div class="nav-item" data-doc="XIO-59"><span>XIO-59 AI 预测</span><span class="badge badge-pro">in_progress</span></div>
+        <div class="nav-item" data-doc="XIO-60"><span>XIO-60 情绪分析</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-61"><span>XIO-61 AI策略发现</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-62"><span>XIO-62 策略优化器</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-63"><span>XIO-63 持仓管理</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-64"><span>XIO-64 风险管理</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-65"><span>XIO-65 交易日志</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-66"><span>XIO-66 推送设置</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-67"><span>XIO-67 每日精选</span><span class="badge badge-pro">in_review</span></div>
+        <div class="nav-item" data-doc="XIO-68"><span>XIO-68 盘中异动</span><span class="badge badge-pro">in_review</span></div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-title">量化专项</div>
+        <div class="nav-item" data-doc="XIO-69"><span>XIO-69 回测引擎</span><span class="badge badge-quant">done</span></div>
+        <div class="nav-item" data-doc="XIO-70"><span>XIO-70 信号扫描规则</span><span class="badge badge-quant">done</span></div>
+        <div class="nav-item" data-doc="XIO-71"><span>XIO-71 指标排行算法</span><span class="badge badge-quant">done</span></div>
+        <div class="nav-item" data-doc="XIO-72"><span>XIO-72 AI预测机制</span><span class="badge badge-quant">done</span></div>
+        <div class="nav-item" data-doc="XIO-73"><span>XIO-73 Scheduler</span><span class="badge badge-quant">done</span></div>
+        <div class="nav-item" data-doc="XIO-74"><span>XIO-74 三级缓存</span><span class="badge badge-quant">done</span></div>
+      </div>
+    </nav>
+    <main class="main" id="main">
+      <div class="empty-state">
+        <h2>选择左侧文档查看</h2>
+        <p>点击导航菜单中的文档标题开始阅读</p>
+      </div>
+    </main>
+  </div>
+  <script>
+    const docs = {
+      'XIO-51': { title: '行情看板功能说明', category: 'OSS', status: 'done', path: 'XIO-51-行情看板功能说明.md' },
+      'XIO-52': { title: '个股详情功能说明', category: 'OSS', status: 'done', path: 'XIO-52-个股详情功能说明.md' },
+      'XIO-53': { title: '策略回测功能说明', category: 'OSS', status: 'done', path: 'XIO-53-策略回测功能说明.md' },
+      'XIO-54': { title: '信号扫描功能说明', category: 'OSS', status: 'done', path: 'XIO-54-信号扫描功能说明.md' },
+      'XIO-55': { title: '自选股功能说明', category: 'OSS', status: 'done', path: 'XIO-55-自选股功能说明.md' },
+      'XIO-56': { title: '选股筛选器功能说明', category: 'OSS', status: 'done', path: 'XIO-56-选股筛选器功能说明.md' },
+      'XIO-57': { title: '指标排行功能说明', category: 'OSS', status: 'done', path: 'XIO-57-指标排行功能说明.md' },
+      'XIO-58': { title: '市场状态功能说明', category: 'OSS', status: 'done', path: 'XIO-58-市场状态功能说明.md' },
+      'XIO-59': { title: 'AI 预测功能说明', category: 'Pro', status: 'in_progress', path: null },
+      'XIO-60': { title: '情绪分析功能说明', category: 'Pro', status: 'in_review', path: null },
+      'XIO-61': { title: 'AI策略发现功能说明', category: 'Pro', status: 'in_review', path: 'XIO-61-AI策略发现功能说明.md' },
+      'XIO-62': { title: '策略优化器功能说明', category: 'Pro', status: 'in_review', path: 'XIO-62-策略优化器功能说明.md' },
+      'XIO-63': { title: '持仓管理功能说明', category: 'Pro', status: 'in_review', path: null },
+      'XIO-64': { title: '风险管理功能说明', category: 'Pro', status: 'in_review', path: 'XIO-64-风险管理功能说明.md' },
+      'XIO-65': { title: '交易日志功能说明', category: 'Pro', status: 'in_review', path: 'XIO-65-交易日志功能说明.md' },
+      'XIO-66': { title: '推送设置功能说明', category: 'Pro', status: 'in_review', path: null },
+      'XIO-67': { title: '每日精选功能说明', category: 'Pro', status: 'in_review', path: 'XIO-67-每日精选功能说明.md' },
+      'XIO-68': { title: '盘中异动功能说明', category: 'Pro', status: 'in_review', path: 'XIO-68-盘中异动功能说明.md' },
+      'XIO-69': { title: '回测引擎机制说明', category: '量化专项', status: 'done', path: 'XIO-69-回测引擎机制说明.md' },
+      'XIO-70': { title: '信号扫描规则机制说明', category: '量化专项', status: 'done', path: 'XIO-70-信号扫描规则机制说明.md' },
+      'XIO-71': { title: '指标排行算法机制说明', category: '量化专项', status: 'done', path: 'XIO-71-指标排行算法机制说明.md' },
+      'XIO-72': { title: 'AI预测机制说明', category: '量化专项', status: 'done', path: 'XIO-72-AI预测机制说明.md' },
+      'XIO-73': { title: 'Scheduler定时任务链说明', category: '量化专项', status: 'done', path: 'XIO-73-Scheduler定时任务链说明.md' },
+      'XIO-74': { title: '三级缓存机制说明', category: '量化专项', status: 'done', path: 'XIO-74-三级缓存机制说明.md' },
+    };
+
+    async function loadDoc(docId) {
+      const doc = docs[docId];
+      const main = document.getElementById('main');
+      
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelector(`[data-doc="${docId}"]`)?.classList.add('active');
+
+      if (!doc.path) {
+        main.innerHTML = `
+          <div class="doc-content active">
+            <div class="doc-header">
+              <h1>${doc.title}</h1>
+              <div class="meta">
+                <span class="badge badge-pro">${doc.status}</span>
+                <span>${doc.category}</span>
+              </div>
+            </div>
+            <div class="doc-body">
+              <div class="empty-state">
+                <h2>文档尚未生成</h2>
+                <p>此文档还在准备中，请稍后再来查看。</p>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      try {
+        const response = await fetch(doc.path);
+        if (!response.ok) throw new Error('Doc not found');
+        let content = await response.text();
+        
+        const categoryBadge = doc.category === 'OSS' ? 'badge-done' : doc.category === 'Pro' ? 'badge-pro' : 'badge-quant';
+        
+        content = content.replace(/^# (.+)$/m, (match, title) => {
+          return `<div class="doc-header"><h1>${title}</h1><div class="meta"><span class="badge ${categoryBadge}">${doc.category}</span><span>XIO-${docId.slice(4)}</span></div></div>`;
+        });
+        
+        content = content.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        content = content.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
+        content = content.replace(/\|(.+)\|/g, (match) => {
+          const cells = match.split('|').filter(c => c.trim());
+          if (cells.some(c => c.trim().match(/^[-:]+$/))) return '';
+          const isHeader = cells.every(c => c.trim().match(/^[A-Z]|^[^a-z]+$/));
+          const tag = isHeader ? 'th' : 'td';
+          return '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+        });
+        content = content.replace(/(<tr>.*<\/tr>)/s, '<table>$1</table>');
+        content = content.replace(/\n\n+/g, '</p><p>');
+        content = content.replace(/^/, '<p>').replace(/$/, '</p>');
+        content = content.replace(/<p><(h[23]|table)/g, '<$1');
+        content = content.replace(/<\/(h[23]|table)><\/p>/g, '</$1>');
+        
+        main.innerHTML = `<div class="doc-content active">${content}</div>`;
+      } catch (e) {
+        main.innerHTML = `
+          <div class="doc-content active">
+            <div class="doc-header">
+              <h1>${doc.title}</h1>
+              <div class="meta">
+                <span class="badge ${doc.category === 'OSS' ? 'badge-done' : 'badge-pro'}">${doc.status}</span>
+                <span>${doc.category}</span>
+              </div>
+            </div>
+            <div class="doc-body">
+              <div class="empty-state">
+                <h2>文档加载失败</h2>
+                <p>无法加载文档内容: ${e.message}</p>
+              </div>
+            </div>
+          </div>`;
+      }
+    }
+
+    document.querySelectorAll('.nav-item').forEach(el => {
+      el.addEventListener('click', () => loadDoc(el.dataset.doc));
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const initial = params.get('doc') || 'XIO-51';
+    loadDoc(initial);
+  </script>
+</body>
+</html>

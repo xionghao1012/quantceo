@@ -7,7 +7,6 @@ const JWT_SECRET = process.env.JWT_SECRET || (() => {
   console.warn('[auth] WARNING: JWT_SECRET not set. Using insecure default. Set JWT_SECRET in production.')
   return 'quantceo-dev-default-change-me'
 })()
-const JWT_EXPIRES_IN = '1d'
 const REFRESH_TOKEN_BYTES = 48
 const BCRYPT_ROUNDS = 12
 
@@ -46,15 +45,17 @@ export function sanitizeUser(user: {
   role: string
   settings: any
   usage: any
+  isAdmin?: boolean | null
   createdAt: Date
   updatedAt: Date
-}): User {
+}): User & { isAdmin?: boolean } {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     avatar: user.avatar || '',
     role: user.role as User['role'],
+    isAdmin: user.isAdmin ?? false,
     settings: typeof user.settings === 'string' ? JSON.parse(user.settings) : (user.settings || {}),
     usage: typeof user.usage === 'string' ? JSON.parse(user.usage) : (user.usage || {}),
     createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : String(user.createdAt),

@@ -1,12 +1,18 @@
-import type { KLine, MinuteKLine, MinutePeriod } from '../../shared/types.js'
+import type{ KLine, MinuteKLine, MinutePeriod } from '../../shared/types.js'
 import { db } from '../db/db.js'
 import { klines as klinesTable, minuteKlines as minuteKlinesTable } from '../db/schema.js'
 import { eq, inArray, and } from 'drizzle-orm'
-import { fetchKlines } from './eastmoney.js'
+import { fetchKlines, fetchAdjustedKlines } from './eastmoney.js'
 import { fetchMinuteKlines } from './tencentMinute.js'
 import { fetchBaostockMinuteKlines } from './baostockMinute.js'
 import { fetchAkshareMinuteKlines } from './akshareMinute.js'
-import { cacheGetKlines, cacheGetKlinesBulk, cacheSetKlinesBulk, cacheGetMinuteKlines, cacheSetMinuteKlines, cacheSetMinuteKlinesBulk } from './redis.js'
+import {
+  cacheGetKlines,
+  cacheGetKlinesBulk,
+  cacheSetKlinesBulk,
+  cacheGetMinuteKlines,
+  cacheSetMinuteKlinesBulk,
+} from './redis.js'
 
 function decodeRow(row: any): KLine {
   return {
@@ -292,4 +298,23 @@ export async function getOrFetchMinuteKlines(code: string, period: MinutePeriod)
 
   cacheSetMinuteKlinesBulk({ [`${period}:${code}`]: JSON.stringify(data) })
   return { klines: data, source: 'api' }
+}
+
+/**
+ * 回测专用行情：优先使用复权全历史，避免除权跳空被当成真实涨跌。
+ *
+ * 退回不复权的两种情况：
+ *  - 接口失败/无数据
+ *  - 序列出现非正价格（负价会让收益率彻底失去意义）
+ */
+export async function getKlinesForBacktest(code: string): Promise<{ klines: KLine[]; adjusted: boolean }> {
+  try {
+    const adjusted = await fetchAdjustedKlines(code)
+    if (adjusted.length > 0 && adjusted.every(k => k.open > 0 && k.close > 0 && k.high > 0 && k.low > 0)) {
+      return { klines: adjusted, adjusted: true }
+    }
+  } catch { /* 退回不复权 */ }
+
+  const raw = await getOrFetchKlines(code)
+  return { klines: raw.klines, adjusted: false }
 }

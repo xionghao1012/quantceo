@@ -9,40 +9,98 @@ on:
 jobs:
   # =============== quant-trading ===============
   quant-trading:
-    name: quant-trading (typecheck + test)
+    name: quant-trading (typecheck + test + coverage + e2e)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: quant_ceo
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PG_HOST: postgres
+      PG_DB: quant_ceo
+      PG_USER: postgres
+      PG_PASSWORD: postgres
     defaults:
       run:
         working-directory: ./quant-trading
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-
       - run: npm ci
 
-      - name: Type Check
-        run: npx tsc --noEmit
+      - name: Database Init
+        run: npm run db:init
 
-      - name: Test
-        run: npx vitest run --reporter=dot
+      - name: Type Check (includes .vue SFCs)
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit Tests + Coverage
+        run: npx vitest run --coverage --reporter=dot
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v5
+        with:
+          directory: ./quant-trading/coverage
+          fail_ci_if_error: false
+
+      - name: Seed E2E Test User
+        run: npm run db:seed-e2e-user
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Start Development Server
+        run: |
+          npx tsx src/server/index.ts &
+          echo "Waiting for server..."
+          for i in $(seq 1 20); do
+            if curl -s http://127.0.0.1:4001/api/health 2>/dev/null | grep -q '"status":"ok"'; then
+              echo "Server is ready"
+              break
+            fi
+            sleep 2
+          done
+        env:
+          PORT: '4001'
+          JWT_SECRET: ci-jwt-secret
+          LICENSE_KEY: pro_dev
+
+      - name: E2E Tests
+        run: npx playwright test --config=e2e/playwright.config.ts --reporter=list
 
   # =============== quant-ai ===============
   quant-ai:
-    name: quant-ai (typecheck + test)
+    name: quant-ai (typecheck)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./quant-ai
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-
       - run: npm ci
-
       - name: Type Check
         run: npx tsc --noEmit
 
@@ -55,12 +113,9 @@ jobs:
         working-directory: ./market-data
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-
       - run: npm ci
-
       - name: Type Check
         run: npx tsc --noEmit
 
@@ -94,6 +149,21 @@ jobs:
       - name: Type Check
         run: npx tsc --noEmit
 
+  # =============== indicator-service ===============
+  indicator-service:
+    name: indicator-service (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./indicator-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - name: Type Check
+        run: npx tsc --noEmit
+
   # =============== quant-sso ===============
   quant-sso:
     name: quant-sso (typecheck)
@@ -103,11 +173,50 @@ jobs:
         working-directory: ./quant-sso
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-
       - run: npm ci
-
       - name: Type Check
         run: npx tsc --noEmit
+
+  # =============== backtest-engine (Python) ===============
+  backtest-engine:
+    name: backtest-engine (Python tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install pytest numpy
+      - name: Run tests
+        run: python -m pytest tests/integration/test_backtest_engine.py -v
+
+  # =============== Docker Compose Validation ===============
+  compose-validate:
+    name: docker-compose validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate OSS compose
+        run: docker compose -f docker-compose.oss.yml config --quiet
+      - name: Validate Pro compose
+        run: docker compose -f docker-compose.pro.yml config --quiet
+
+  # =============== Docker Build (dry-run) ===============
+  docker-build:
+    name: docker build check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build quant-trading
+        run: docker build -t quantceo-trading ./quant-trading
+      - name: Build scheduler
+        run: docker build -t quantceo-scheduler ./scheduler
+      - name: Build market-data
+        run: docker build -t quantceo-market-data ./market-data
+      - name: Build scan-engine
+        run: docker build -t quantceo-scan-engine ./scan-engine
+      - name: Build backtest-engine
+        run: docker build -t quantceo-backtest-engine ./backtest-engine

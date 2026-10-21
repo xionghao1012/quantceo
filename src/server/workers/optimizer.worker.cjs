@@ -262,7 +262,7 @@ function backtest(klines, strategyType, params) {
       break
     }
     default:
-      equity = closes.map((c, i) => 10000 * (c / closes[0]))
+      equity = closes.map((c) => 10000 * (c / closes[0]))
       capital = equity[equity.length - 1]
   }
 

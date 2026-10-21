@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { eq, and, asc, sql } from 'drizzle-orm'
+import { eq, and, asc, sql, inArray } from 'drizzle-orm'
 import { db } from '../db/db.js'
 import { watchlist, watchlistGroups, stocks } from '../db/schema.js'
 import { requireAuth } from '../middleware/auth.js'
@@ -187,22 +187,7 @@ router.put('/:id', requireAuth, async (req, res) => {
   res.json(result[0])
 })
 
-router.delete('/:id', requireAuth, async (req, res) => {
-  const userId = req.user!.userId
-  const id = Number(req.params.id)
-  if (!id) return res.status(400).json({ error: '无效的ID' })
-
-  const item = await db.select().from(watchlist)
-    .where(and(eq(watchlist.id, id), eq(watchlist.userId, userId)))
-    .limit(1)
-  if (item.length === 0) {
-    return res.status(404).json({ error: '自选股不存在' })
-  }
-
-  await db.delete(watchlist).where(eq(watchlist.id, id))
-  res.json({ success: true })
-})
-
+// ← batch routes must come before /:id to prevent '/batch' matching as ':id'
 router.post('/batch', requireAuth, async (req, res) => {
   const userId = req.user!.userId
   const { codes, groupId } = req.body as { codes?: string[]; groupId?: number }
@@ -222,7 +207,7 @@ router.post('/batch', requireAuth, async (req, res) => {
   }
   const validCodes = codes.filter(c => typeof c === 'string' && c.length > 0)
   const existing = await db.select({ code: watchlist.code }).from(watchlist)
-    .where(and(eq(watchlist.userId, userId), sql`${watchlist.code} = ANY(${validCodes})`))
+    .where(and(eq(watchlist.userId, userId), inArray(watchlist.code, validCodes)))
   const existingSet = new Set(existing.map(e => e.code))
   const toAdd = validCodes.filter(c => !existingSet.has(c))
   if (toAdd.length === 0) {
@@ -245,8 +230,25 @@ router.delete('/batch', requireAuth, async (req, res) => {
   }
   const validCodes = codes.filter(c => typeof c === 'string' && c.length > 0)
   const result = await db.delete(watchlist)
-    .where(and(eq(watchlist.userId, userId), sql`${watchlist.code} = ANY(${validCodes})`))
+    .where(and(eq(watchlist.userId, userId), inArray(watchlist.code, validCodes)))
   res.json({ deleted: result.rowCount })
+})
+
+// ← /:id must come AFTER /batch to prevent '/batch' being matched as ':id'
+router.delete('/:id', requireAuth, async (req, res) => {
+  const userId = req.user!.userId
+  const id = Number(req.params.id)
+  if (!id) return res.status(400).json({ error: '无效的ID' })
+
+  const item = await db.select().from(watchlist)
+    .where(and(eq(watchlist.id, id), eq(watchlist.userId, userId)))
+    .limit(1)
+  if (item.length === 0) {
+    return res.status(404).json({ error: '自选股不存在' })
+  }
+
+  await db.delete(watchlist).where(eq(watchlist.id, id))
+  res.json({ success: true })
 })
 
 export default router

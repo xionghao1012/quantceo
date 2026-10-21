@@ -226,6 +226,12 @@ function stockQuote(code: string) {
 
     <!-- Stock Grid -->
     <div class="stock-grid">
+      <template v-if="loading && !paginatedStocks.length">
+        <div v-for="i in 8" :key="'sk-' + i" class="stock-card skeleton-card">
+          <div class="skeleton-line w-60"></div>
+          <div class="skeleton-line w-40"></div>
+        </div>
+      </template>
       <div
         v-for="s in paginatedStocks"
         :key="s.code"
@@ -300,7 +306,7 @@ function stockQuote(code: string) {
   color: var(--text-tertiary);
   background: rgba(139,92,246,0.1);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .market-hero {
@@ -338,7 +344,7 @@ function stockQuote(code: string) {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
 }
 
@@ -486,7 +492,7 @@ function stockQuote(code: string) {
   width: 3px;
   height: 14px;
   background: var(--brand-gradient);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 /* Error Banner */
@@ -564,6 +570,30 @@ function stockQuote(code: string) {
   gap: 10px;
 }
 
+.skeleton-card {
+  pointer-events: none;
+  min-height: 115px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-xs);
+  background: var(--border);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-line.w-60 { width: 60%; }
+.skeleton-line.w-40 { width: 40%; margin-top: 12px; }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation: none; opacity: 0.5; }
+}
+
 .stock-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -606,7 +636,7 @@ function stockQuote(code: string) {
   flex-shrink: 0;
   padding: 1px 5px;
   background: var(--bg);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .stock-card-body {
@@ -634,7 +664,7 @@ function stockQuote(code: string) {
   font-size: 12px;
   font-weight: 600;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -665,7 +695,7 @@ function stockQuote(code: string) {
   background: linear-gradient(90deg, var(--border) 25%, var(--border-light) 50%, var(--border) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 22px;
   font-weight: 700;
 }
@@ -676,7 +706,7 @@ function stockQuote(code: string) {
   background: linear-gradient(90deg, var(--border) 25%, var(--border-light) 50%, var(--border) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 @keyframes shimmer {

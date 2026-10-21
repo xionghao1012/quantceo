@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import VChart from 'vue-echarts'
 import '../echarts-setup.js'
 import { useStockStore } from '../stores/stock'
-import TermTip from '../components/TermTip.vue'
 
 const router = useRouter()
 const store = useStockStore()
@@ -316,7 +315,7 @@ function fmtPrice(v: number | string) {
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
 .page-header h1 { font-size: 18px; font-weight: 600; }
 .tab-nav { display: flex; gap: 4px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px; }
-.tab-btn { padding: 5px 16px; border: none; background: transparent; color: var(--text-secondary); border-radius: 4px; cursor: pointer; font-size: 13px; transition: var(--transition); }
+.tab-btn { padding: 5px 16px; border: none; background: transparent; color: var(--text-secondary); border-radius: var(--radius-xs); cursor: pointer; font-size: 13px; transition: var(--transition); }
 .tab-btn.active { background: var(--brand-glow); color: var(--brand); font-weight: 600; }
 
 .control-card { margin-bottom: 16px; padding: 14px 16px; }
@@ -339,11 +338,11 @@ function fmtPrice(v: number | string) {
 .page-info { font-size: 12px; color: var(--text-secondary); min-width: 40px; text-align: center; }
 
 .loading-state, .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 80px 20px; color: var(--text-tertiary); }
-.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--brand); border-radius: var(--radius-full); animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.scan-progress-bar { width: 300px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
-.scan-progress-fill { height: 100%; background: var(--brand-gradient); border-radius: 3px; transition: width 0.3s ease; }
+.scan-progress-bar { width: 300px; height: 6px; background: var(--border); border-radius: var(--radius-xs); overflow: hidden; }
+.scan-progress-fill { height: 100%; background: var(--brand-gradient); border-radius: var(--radius-xs); transition: width 0.3s ease; }
 
 .scan-count { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
 
@@ -357,7 +356,7 @@ function fmtPrice(v: number | string) {
 .signal-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .signal-date { font-size: 11px; color: var(--text-tertiary); }
 .signal-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-.badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+.badge { padding: 3px 8px; border-radius: var(--radius-xs); font-size: 11px; font-weight: 500; }
 .badge-buy { background: var(--brand-glow); color: var(--brand); }
 .badge-sell { background: var(--down-bg); color: var(--down); }
 .badge-strength { background: var(--bg); color: var(--text-tertiary); border: 1px solid var(--border); }

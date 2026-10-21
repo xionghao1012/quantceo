@@ -1,21 +1,30 @@
 {
   "name": "quantceo",
-  "version": "0.1.0",
+  "version": "0.1.0-beta",
   "private": true,
   "type": "module",
   "description": "Open-source A-share quantitative trading platform — zero-code strategy backtesting & signal scanning",
   "license": "MIT",
   "scripts": {
-    "dev:server": "tsx watch src/server/index.ts",
+    "dev:server": "bash scripts/dev-server.sh",
     "dev:client": "vite --host --port 5173",
-    "dev": "tsx watch src/server/index.ts & vite --host --port 5173",
+    "dev": "bash scripts/dev-server.sh & PG_DB=quant_ceo_dev VITE_API_PORT=3003 vite --host --port 5174",
+    "dev:pro": "LICENSE_KEY=pro_dev bash scripts/dev-server.sh & PG_DB=quant_ceo_dev VITE_API_PORT=3003 vite --host --port 5174",
+    "dev:prod": "bash scripts/dev-server.sh & VITE_API_PORT=3001 vite --host --port 5173",
     "build": "tsc && vite build",
     "db:init": "tsx src/server/db/init.ts",
     "db:seed": "tsx src/server/db/seed.ts",
+    "db:seed:dev": "PG_DB=quant_ceo_dev tsx src/server/db/seed-dev.ts",
     "db:seed-strategies": "tsx src/server/db/seedStrategies.ts",
     "db:seed-all-stocks": "tsx src/server/db/seed_all_stocks.ts",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint \"src/**/*.{ts,vue}\" --pass-on-unpruned-suppressions",
+    "lint:fix": "eslint \"src/**/*.{ts,vue}\" --pass-on-unpruned-suppressions --fix",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "db:seed-e2e-user": "tsx src/server/db/seedE2EUser.ts",
+    "lint:prune": "eslint \"src/**/*.{ts,vue}\" --prune-suppressions"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
@@ -39,9 +48,13 @@
     "vue": "^3.5.0",
     "vue-echarts": "^7.0.0",
     "vue-router": "^4.6.4",
-    "workerpool": "^10.0.2"
+    "workerpool": "^10.0.2",
+    "ws": "^8.21.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -50,13 +63,23 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.11.0",
+    "@types/supertest": "^7.2.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-vue": "^5.1.0",
+    "@vitest/coverage-istanbul": "^5.0.5",
+    "@vitest/coverage-v8": "^5.0.4",
     "autoprefixer": "^10.5.0",
+    "dotenv": "^17.4.2",
     "drizzle-kit": "^0.28.0",
+    "eslint": "^10.13.0",
+    "eslint-plugin-vue": "^10.11.1",
     "postcss": "^8.5.15",
+    "supertest": "^7.2.2",
     "terser": "^5.48.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^4.1.8"
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.4",
+    "vue-tsc": "^3.3.13"
   }
 }

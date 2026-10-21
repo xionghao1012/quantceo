@@ -77,6 +77,7 @@ export interface BacktestRequest {
 }
 
 export interface BacktestResult {
+  strategyName?: string
   totalReturn: number
   annualReturn: number
   sharpe: number
@@ -107,6 +108,8 @@ export interface User {
   name: string
   avatar: string
   role: UserRole
+  isAdmin?: boolean
+  permissions?: string[]
   settings: Record<string, any>
   usage: Record<string, any>
   createdAt: string
@@ -242,4 +245,76 @@ export interface OptimizationProgress {
     totalReturn: number
     tradeCount: number
   }
+}
+
+export type AdminRoleCode = 'operator' | 'ops' | 'support' | 'admin' | 'sales'
+
+export interface AdminPermission {
+  id: number
+  code: string
+  name_zh: string
+  module: 'user' | 'order' | 'stats' | 'oauth' | 'system' | 'apikey' | 'role'
+}
+
+export interface AdminRole {
+  id: number
+  code: AdminRoleCode
+  name_zh: string
+  description: string | null
+  is_active: boolean
+}
+
+export interface AdminRolePermission {
+  role_id: number
+  permission_id: number
+}
+
+export interface AdminUserRole {
+  id: number
+  user_id: number
+  role_id: number
+  granted_by: number | null
+  created_at: string
+}
+
+export type ResonanceIndicator = 'rsi' | 'kdj' | 'macd' | 'bollinger' | 'ma'
+
+export interface ResonanceConfig {
+  fundWeight: number
+  techWeight: number
+  indicators: {
+    name: ResonanceIndicator
+    params: Record<string, number>
+    enabled: boolean
+  }[]
+}
+
+export interface ResonanceTemplate {
+  id: number
+  name: string
+  description: string
+  config: ResonanceConfig
+}
+
+export interface ResonanceSignal {
+  code: string
+  name: string
+  price: number
+  fundScore: number
+  techScore: number
+  combinedScore: number
+  triggeredIndicators: {
+    name: string
+    value: number
+    threshold: number
+  }[]
+}
+
+export interface ResonanceBacktestRequest {
+  code: string
+  resonanceConfig: ResonanceConfig
+  fundSignals: { code: string; score: number; date: string }[]
+  startDate: string
+  endDate: string
+  initialCapital: number
 }

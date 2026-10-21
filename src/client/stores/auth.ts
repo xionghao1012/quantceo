@@ -6,10 +6,12 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || '')
   const refreshToken = ref(localStorage.getItem('refreshToken') || '')
   const user = ref<User | null>(null)
+  const plan = ref('free')
   let _userPromise: Promise<void> | null = null
+  let _planLoadPromise: Promise<void> | null = null
 
   const isLoggedIn = computed(() => !!token.value)
-  const role = computed(() => user.value?.role || 'free')
+  const role = computed(() => plan.value !== 'free' ? plan.value : (user.value?.role || 'free'))
 
   function saveSession(t: string, rt: string) {
     token.value = t
@@ -30,15 +32,37 @@ export const useAuthStore = defineStore('auth', () => {
           const data = await res.json()
           if (data.user) user.value = data.user
           else clearSession()
-        } else if (res.status === 401 || res.status === 403) {
+        } else {
           clearSession()
         }
       } catch {
+        // network error — keep current session, don't clear
       } finally {
         _userPromise = null
       }
     })()
     return _userPromise
+  }
+
+  async function fetchPlan() {
+    if (!token.value) return
+    if (_planLoadPromise) return _planLoadPromise
+    _planLoadPromise = (async () => {
+      try {
+        const res = await fetch('/api/subscription/me', {
+          headers: { Authorization: `Bearer ${token.value}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.plan) plan.value = data.plan
+        }
+      } catch {
+        // non-critical — keep current plan value
+      } finally {
+        _planLoadPromise = null
+      }
+    })()
+    return _planLoadPromise
   }
 
   async function register(email: string, password: string, name?: string) {
@@ -72,7 +96,7 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = data.user
     } catch (e: any) {
       if (e.message.includes('fetch') || e.message.includes('network') || e.message.includes('ECONNREFUSED')) {
-        throw new Error('认证服务暂时不可用，请稍后重试')
+        throw new Error('认证服务暂时不可用，请稍后重试', { cause: e })
       }
       throw e
     }
@@ -121,7 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    token, refreshToken, user, isLoggedIn, role,
-    fetchUser, register, login, refresh, logout, authHeaders,
+    token, refreshToken, user, plan, isLoggedIn, role,
+    fetchUser, fetchPlan, register, login, refresh, logout, authHeaders, saveSession,
   }
 })

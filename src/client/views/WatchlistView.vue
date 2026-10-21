@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useWatchlistStore } from '../stores/watchlist'
 import { useAuthStore } from '../stores/auth'
 import { useStockStore } from '../stores/stock'
-import TermTip from '../components/TermTip.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const router = useRouter()
 const watchlist = useWatchlistStore()
@@ -97,14 +97,12 @@ async function removeItem(id: number) {
 }
 
 function openAddGroup(id?: number) {
-  if (id !== undefined) {
-    const g = watchlist.groups.find(g => g.id === id)
-    if (g) {
-      editingGroup.value = { id, name: g.name, color: g.color }
-    }
-  } else {
-    editingGroup.value = { name: '', color: '#f59e0b' }
+  const g = id !== undefined ? watchlist.groups.find(g => g.id === id) : undefined
+  if (id !== undefined && !g) {
+    error.value = '分组不存在'
+    return
   }
+  editingGroup.value = g ? { id: g.id, name: g.name, color: g.color } : { name: '', color: '#f59e0b' }
   newGroupName.value = editingGroup.value.name
   newGroupColor.value = editingGroup.value.color
   showGroupModal.value = true
@@ -233,11 +231,9 @@ async function changeGroup(itemId: number, groupId: number | null) {
           <button class="btn-sm" @click="showAddAlert = true">+ 添加告警</button>
         </div>
         <div v-if="alertsLoading" class="loading-state"><div class="spinner" /><span>加载中...</span></div>
-        <div v-else-if="alerts.length === 0" class="empty-state">
-          <div class="empty-icon">🔔</div>
-          <div>暂无价格告警</div>
-          <button class="btn-sm" @click="showAddAlert = true" style="margin-top:8px">+ 添加告警</button>
-        </div>
+        <EmptyState v-else-if="alerts.length === 0" variant="alert" text="暂无价格告警">
+          <button class="btn-sm" @click="showAddAlert = true">+ 添加告警</button>
+        </EmptyState>
         <div v-else class="alerts-list">
           <div v-for="a in alerts" :key="a.id" class="alert-item" :class="a.triggeredAt ? 'triggered' : ''">
             <div class="alert-info">
@@ -347,14 +343,14 @@ async function changeGroup(itemId: number, groupId: number | null) {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text-secondary);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   font-size: 13px;
   cursor: pointer;
   transition: all var(--transition);
 }
 .group-tab:hover { border-color: var(--brand); color: var(--brand); }
 .group-tab.active { background: var(--brand); border-color: var(--brand); color: #0b0d14; font-weight: 600; }
-.group-tab .dot { width: 8px; height: 8px; border-radius: 50%; }
+.group-tab .dot { width: 8px; height: 8px; border-radius: var(--radius-full); }
 .group-tab .count { font-size: 11px; opacity: 0.7; }
 .edit-tab { padding: 6px 10px; font-size: 12px; }
 
@@ -416,7 +412,7 @@ async function changeGroup(itemId: number, groupId: number | null) {
   width: 24px; height: 24px;
   border: 3px solid var(--border);
   border-top-color: var(--brand);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -482,7 +478,7 @@ async function changeGroup(itemId: number, groupId: number | null) {
 .color-row { display: flex; gap: 8px; }
 .color-swatch {
   width: 28px; height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform 0.15s;
@@ -546,7 +542,7 @@ async function changeGroup(itemId: number, groupId: number | null) {
 .spacer { flex: 1; }
 .error-text { color: var(--danger); font-size: 13px; margin-top: 8px; }
 .color-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.color-swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.color-swatch { width: 24px; height: 24px; border-radius: var(--radius-full); border: 2px solid transparent; cursor: pointer; }
 .color-swatch.selected { border-color: var(--text-primary); }
 
 @media (min-width: 768px) {

@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/auth'
 import { useStockStore } from './stores/stock'
 import { useHotkeys, hotkeyDescriptions } from './composables/useHotkeys'
 import ErrorBoundary from './components/ErrorBoundary.vue'
+import AlertPopup from './components/AlertPopup.vue'
 import { pluginManager, type NavItem } from './plugin'
 
 const router = useRouter()
@@ -51,6 +52,19 @@ function closeMobileSearch() {
 const unreadCount = ref(0)
 const showNotifications = ref(false)
 const showShortcuts = ref(false)
+const licenseVersion = ref('Free')
+const appVersion = __APP_VERSION__
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/health')
+    if (res.ok) {
+      const data = await res.json()
+      licenseVersion.value = data.license === 'pro' ? 'Pro' : 'Free'
+    }
+  } catch {}
+  if (auth.isLoggedIn) auth.fetchPlan()
+})
 const notifications = ref<any[]>([])
 const mobileMenuOpen = ref(false)
 let notifInterval: ReturnType<typeof setInterval>
@@ -123,7 +137,7 @@ onMounted(() => {
   if (ssoToken && ssoRefresh) {
     auth.saveSession(ssoToken, ssoRefresh)
     if (ssoUser) {
-      try { auth.user.value = JSON.parse(decodeURIComponent(ssoUser)) } catch {}
+      try { auth.user = JSON.parse(decodeURIComponent(ssoUser)) } catch {}
     }
     window.history.replaceState({}, '', window.location.pathname)
     router.push('/')
@@ -204,6 +218,15 @@ function isActive(item: NavItem) {
 
 function navigate(item: NavItem) {
   if (item.disable && !item.check()) return
+  if (!item.check()) {
+    mobileMenuOpen.value = false
+    if (!auth.isLoggedIn) {
+      router.push({ name: 'login', query: { redirect: `/${item.route}` } })
+    } else {
+      router.push({ name: 'pricing', query: { reason: 'plan_required', feature: item.route } })
+    }
+    return
+  }
   mobileMenuOpen.value = false
   if (item.route === 'detail') {
     goDetail()
@@ -238,11 +261,14 @@ function closeMobileMenu(e: MouseEvent) {
             v-for="item in group.items"
             :key="item.route"
             class="nav-item"
-            :class="{ active: isActive(item), disabled: item.disable && !item.check() }"
+            :class="{ active: isActive(item), disabled: !item.check(), 'needs-upgrade': !item.check() && !item.disable }"
+            :aria-disabled="!item.check()"
+            :aria-label="!item.check() && !item.disable ? `${item.label}，需要升级 Pro 账户` : undefined"
             @click="navigate(item)"
           >
-            <span class="nav-icon">{{ item.icon }}</span>
+            <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
             <span class="nav-label">{{ item.label }}</span>
+            <span v-if="!item.check() && !item.disable" class="nav-lock" aria-hidden="true" title="需要升级 Pro 账户">🔒</span>
           </button>
         </div>
       </nav>
@@ -252,14 +278,14 @@ function closeMobileMenu(e: MouseEvent) {
           <div class="user-email">{{ auth.user?.email }}</div>
           <div class="user-links">
             <router-link to="/profile" class="user-link">个人中心</router-link>
-            <button class="logout-btn" @click="auth.logout()">退出</button>
+            <button class="logout-btn" @click="auth.logout(); router.push('/login')">退出</button>
           </div>
         </div>
         <template v-else>
           <router-link to="/login" class="auth-link">登录</router-link>
           <router-link to="/register" class="auth-link accent">注册</router-link>
         </template>
-        <div class="version">v0.1.0-beta</div>
+        <div class="version">{{ licenseVersion }} v{{ appVersion }}</div>
       </div>
     </aside>
 
@@ -441,13 +467,24 @@ function closeMobileMenu(e: MouseEvent) {
           </router-view>
         </ErrorBoundary>
       </main>
+
+      <footer class="app-footer">
+        <nav class="footer-nav">
+          <router-link to="/pricing" class="footer-link">定价</router-link>
+          <router-link to="/terms" class="footer-link">服务条款</router-link>
+          <router-link to="/privacy" class="footer-link">隐私政策</router-link>
+          <router-link to="/refund-policy" class="footer-link">退款政策</router-link>
+          <a href="mailto:435541900@qq.com" class="footer-link">联系我们</a>
+        </nav>
+        <p class="footer-copy">© 2026 QuantCEO · 支付由 Paddle 处理</p>
+      </footer>
+
+      <AlertPopup />
     </div>
   </div>
 </template>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;900&display=swap');
-
 /* ===== Theme: Amber / Gold ===== */
 [data-theme="amber"] {
   --brand: hsl(42, 86%, 55%);
@@ -511,16 +548,21 @@ function closeMobileMenu(e: MouseEvent) {
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
 
-  --radius: 10px;
+  /* 圆角 scale：只有这 5 档 + 全圆，别再写裸 px */
+  --radius-xs: 4px;
   --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius: 10px;
   --radius-lg: 14px;
+  --radius-full: 50%;
 
   --sidebar-width: 220px;
   --header-height: 60px;
 
   --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 
-  --font: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace;
 }
 
 /* ===== Light Mode ===== */
@@ -559,7 +601,7 @@ body {
 input, button, select { font-family: inherit; font-size: inherit; }
 a { text-decoration: none; color: inherit; }
 ::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-xs); }
 ::selection { background: var(--brand); color: var(--bg-deep); }
 
 /* ===== App Layout ===== */
@@ -606,7 +648,7 @@ a { text-decoration: none; color: inherit; }
   width: 30px;
   height: 30px;
   background: var(--brand-gradient);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -656,6 +698,7 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
   border: none;
@@ -702,12 +745,28 @@ a { text-decoration: none; color: inherit; }
   width: 3px;
   height: 18px;
   background: var(--brand-gradient);
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
 }
 
 .nav-item.disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.nav-item.needs-upgrade {
+  opacity: 0.55;
+  cursor: pointer;
+}
+.nav-item.needs-upgrade:hover {
+  opacity: 0.8;
+  background: var(--brand-glow);
+}
+
+.nav-lock {
+  font-size: 10px;
+  margin-left: auto;
+  opacity: 0.5;
+  flex-shrink: 0;
 }
 
 /* ===== Sidebar Footer ===== */
@@ -744,7 +803,8 @@ a { text-decoration: none; color: inherit; }
   cursor: pointer;
   background: none;
   border: none;
-  padding: 0;
+  /* WCAG 2.5.8 目标尺寸 ≥24px */
+  padding: 6px 2px;
   transition: var(--transition);
 }
 
@@ -757,10 +817,56 @@ a { text-decoration: none; color: inherit; }
   font-weight: 600;
 }
 
+.legal-links {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.legal-link {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  transition: var(--transition);
+}
+.legal-link:hover {
+  color: var(--brand);
+}
 .version {
   font-size: 11px;
   color: var(--text-tertiary);
   margin-top: 8px;
+}
+
+/* ===== App Footer ===== */
+.app-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.footer-nav {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.footer-link {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  /* WCAG 2.5.8 目标尺寸 ≥24px */
+  padding: 3px 2px;
+  display: inline-block;
+  transition: var(--transition);
+}
+.footer-link:hover {
+  color: var(--brand);
+}
+.footer-copy {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin: 0;
 }
 
 /* ===== Main ===== */
@@ -810,7 +916,7 @@ a { text-decoration: none; color: inherit; }
   width: 100%;
   padding: 8px 12px 8px 34px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text-primary);
   outline: none;
@@ -836,7 +942,7 @@ a { text-decoration: none; color: inherit; }
   right: 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(0,0,0,0.3);
   z-index: 1000;
   overflow: hidden;
@@ -864,7 +970,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .stock-code {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--brand);
   font-weight: 600;
@@ -881,7 +987,7 @@ a { text-decoration: none; color: inherit; }
   color: var(--text-tertiary);
   background: var(--bg);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .header-actions {
@@ -914,7 +1020,7 @@ a { text-decoration: none; color: inherit; }
   color: #fff;
   font-size: 10px;
   font-weight: 700;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1005,7 +1111,7 @@ a { text-decoration: none; color: inherit; }
 .notif-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--brand);
   flex-shrink: 0;
   margin-top: 4px;
@@ -1015,7 +1121,7 @@ a { text-decoration: none; color: inherit; }
 .help-btn {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-secondary);
@@ -1077,10 +1183,10 @@ a { text-decoration: none; color: inherit; }
   padding: 0 6px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary);
   box-shadow: 0 1px 0 var(--border);
 }
@@ -1108,7 +1214,7 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   border: 1px solid var(--border);
 }
@@ -1118,7 +1224,7 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 5px;
   padding: 5px 10px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   border: none;
   background: transparent;
   color: var(--text-tertiary);
@@ -1141,7 +1247,7 @@ a { text-decoration: none; color: inherit; }
 .theme-opt .dot {
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
@@ -1159,7 +1265,7 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 8px;
   padding: 3px 12px 3px 3px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   border: 1px solid var(--border);
   cursor: pointer;
@@ -1173,7 +1279,7 @@ a { text-decoration: none; color: inherit; }
 .avatar {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--brand-gradient);
   color: #0b0d14;
   display: flex;
@@ -1283,7 +1389,7 @@ a { text-decoration: none; color: inherit; }
   width: 3px;
   height: 14px;
   background: var(--brand-gradient);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 /* ===== Responsive ===== */
@@ -1365,7 +1471,7 @@ a { text-decoration: none; color: inherit; }
   display: block;
   height: 2px;
   background: var(--text-primary);
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   transition: transform 0.2s, opacity 0.2s;
 }
 .hamburger.open span:nth-child(1) {
@@ -1382,7 +1488,7 @@ a { text-decoration: none; color: inherit; }
   display: none;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 6px 12px;
   cursor: pointer;
   color: var(--text-primary);
@@ -1403,7 +1509,7 @@ a { text-decoration: none; color: inherit; }
   width: 100%;
   max-width: 100%;
   background: var(--bg-secondary);
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   max-height: 80vh;
   overflow: hidden;
   display: flex;
@@ -1436,7 +1542,7 @@ a { text-decoration: none; color: inherit; }
   width: 100%;
   padding: 12px 12px 12px 38px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text-primary);
   font-size: 16px;
