@@ -55,6 +55,10 @@ function getBoard(code: string, exchange: string): string {
 
 export async function computeDailyMetrics(metricDate?: string): Promise<number> {
   const finalDate = metricDate || today()
+  if (!(await marketDataReady(finalDate))) {
+    console.log(`[Scheduler] 日指标 ${finalDate}：行情还没入库，跳过（等 18:00 同步后再算）`)
+    return 0
+  }
   const allStocks = await getStocksRepository().findAll()
   const BATCH = 50
   let computed = 0
@@ -149,6 +153,10 @@ export async function computeDailyMetrics(metricDate?: string): Promise<number> 
 }
 
 async function signalScanForDate(scanDate: string): Promise<number> {
+  if (!(await marketDataReady(scanDate))) {
+    console.log(`[Scheduler] 信号扫描 ${scanDate}：行情还没入库，跳过`)
+    return 0
+  }
   const allStocks = await getStocksRepository().findAll()
   let signalsWritten = 0
   let stocksExamined = 0
@@ -376,6 +384,25 @@ function ymd(d: Date): string {
 }
 
 function today(): string { return ymd(new Date()) }
+
+/**
+ * 目标交易日的 K 线是否已经入库。
+ * 用它挡住两类错误：容器凌晨重启时 catch-up 用昨天的 K 线算出「今天」的信号/指标；
+ * 以及 15:30 的指标任务跑在 18:00 的行情同步之前。
+ * 只查几只主力票（走 code 索引），全表 max(date) 要扫 1600 万行。
+ */
+async function marketDataReady(date: string): Promise<boolean> {
+  try {
+    const r = await db.execute(sql`
+      SELECT max(date)::text AS d FROM klines
+      WHERE code IN ('600519', '000001', '600036', '601318', '000858')
+    `) as any
+    const d = r?.rows?.[0]?.d
+    return !!d && d >= date
+  } catch {
+    return true // 查不到就放行，别把正常任务卡死
+  }
+}
 
 /** 下一个交易日：至少跳过周末（节假日由 evaluatePredictions 兜） */
 export function nextTradingDay(dateStr: string): string {
@@ -646,7 +673,8 @@ export function startScheduler() {
     }
   })
 
-  cron.schedule('30 15 * * 1-5', async () => {
+  // 必须排在 18:00 行情同步之后：原来 15:30 算，K 线还没更新，指标永远算在数据之前
+  cron.schedule('40 18 * * 1-5', async () => {
     console.log('[Scheduler] Computing daily metrics...')
     const d = today()
     await getSchedulerLogRepository().insertStart('daily_metrics', d)
@@ -659,7 +687,7 @@ export function startScheduler() {
     }
   })
 
-  cron.schedule('30 15 * * 1-5', async () => {
+  cron.schedule('40 18 * * 1-5', async () => {
     console.log('[Scheduler] Computing limit-up records...')
     const d = today()
     await getSchedulerLogRepository().insertStart('limit_up', d)
@@ -673,7 +701,7 @@ export function startScheduler() {
     }
   })
 
-  cron.schedule('35 15 * * 1-5', async () => {
+  cron.schedule('45 18 * * 1-5', async () => {
     console.log('[Scheduler] Computing strategy backtests...')
     try {
       const { runStrategyBacktestAllPeriods } = await import('./backtestStrategyService.js')
@@ -753,7 +781,7 @@ export function startScheduler() {
     }
   })
 
-  cron.schedule('35 15 * * 1-5', async () => {
+  cron.schedule('45 18 * * 1-5', async () => {
     console.log('[Scheduler] Generating AI predictions for top stocks...')
     try {
       const { selectDailyPicks, getHoldings, loadKlines, predictOne, savePrediction } = await import('../ai/predict.js')
