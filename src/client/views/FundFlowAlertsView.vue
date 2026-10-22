@@ -84,7 +84,12 @@ onMounted(fetchConfigs)
     <div v-if="error" class="error-msg">{{ error }}</div>
     <div v-if="loading && !configs.length" class="loading">加载中...</div>
 
-    <EmptyState v-else-if="!configs.length && !error" variant="alert" text="暂无告警配置">
+    <EmptyState
+      v-else-if="!configs.length && !error"
+      variant="alert"
+      text="还没有设置告警条件"
+      hint="告警是按条件触发的：设好「主力净流入超过多少」或「涨幅超过多少」，命中时通过微信/邮件推给你，不设条件就不会有提醒。"
+    >
       <button class="btn-brand" @click="router.push('/fund-flow/alerts/create')">创建第一个告警</button>
     </EmptyState>
 

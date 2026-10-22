@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStockStore } from '../stores/stock'
+import DataFreshness from '../components/DataFreshness.vue'
 import TermTip from '../components/TermTip.vue'
 import QuickAlertModal from '../components/QuickAlertModal.vue'
 
@@ -155,6 +156,7 @@ function fmtVol(v: number) {
   <div class="screener-view">
     <div class="page-header">
       <h1>选股筛选</h1>
+      <DataFreshness />
     </div>
 
     <div class="card control-card">

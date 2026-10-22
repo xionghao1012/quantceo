@@ -59,7 +59,12 @@ onMounted(fetchHistory)
 
     <div v-if="error" class="error-msg">{{ error }}</div>
     <div v-if="loading && !alerts.length" class="loading">加载中...</div>
-    <EmptyState v-else-if="!alerts.length" variant="list" text="暂无告警记录" />
+    <EmptyState
+      v-else-if="!alerts.length"
+      variant="list"
+      text="还没有触发过告警"
+      hint="这里只记录触发过的告警。条件没命中就不会有记录 —— 如果一直空，先去告警配置里检查条件是不是设得太严。"
+    />
 
     <div v-else class="alert-table-wrap">
       <table class="alert-table">

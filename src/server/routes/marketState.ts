@@ -1,4 +1,6 @@
 import { Router } from 'express'
+import { sql } from 'drizzle-orm'
+import { db } from '../db/db.js'
 import { getMarketState } from '../ai/marketState.js'
 import { requireAuth } from '../middleware/auth.js'
 
@@ -73,7 +75,24 @@ router.get('/indices', async (_req, res) => {
       }
     }).filter(Boolean)
 
-    res.json({ indices: result, marketDate, updatedAt: new Date().toISOString() })
+    // 涨跌家数自己算：腾讯指数接口不返回这个字段，前端之前一直显示 0。
+    // 用 daily_metrics 最新一天的全市场统计，比指数接口里的局部数字更可信。
+    let breadth: { up: number; down: number; flat: number; total: number } | null = null
+    try {
+      const r = await db.execute(sql`
+        SELECT
+          count(*) FILTER (WHERE change_pct > 0)::int AS up,
+          count(*) FILTER (WHERE change_pct < 0)::int AS down,
+          count(*) FILTER (WHERE change_pct = 0)::int AS flat,
+          count(*)::int AS total
+        FROM daily_metrics
+        WHERE metric_date = (SELECT max(metric_date) FROM daily_metrics)
+      `)
+      const row = (r as any).rows?.[0]
+      if (row) breadth = row
+    } catch {}
+
+    res.json({ indices: result, marketDate, breadth, updatedAt: new Date().toISOString() })
   } catch (e: any) {
     console.error('Indices error:', e)
     res.status(500).json({ error: e.message || '获取指数数据失败' })

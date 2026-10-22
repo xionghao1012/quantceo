@@ -207,6 +207,15 @@ useHotkeys([
 ])
 
 const navGroups = computed(() => pluginManager.navGroups)
+// Pro 能力折叠状态（按分组标题记）
+const expandedPro = ref<Record<string, boolean>>({})
+// check() 通过 = 现在就能用；check() 不过且不是 disable = 需要升级
+function baseItems(group: any) {
+  return group.items.filter((i: any) => i.check() || i.disable)
+}
+function proItems(group: any) {
+  return group.items.filter((i: any) => !i.check() && !i.disable)
+}
 
 function isActive(item: NavItem) {
   const path = router.currentRoute.value.path
@@ -258,18 +267,44 @@ function closeMobileMenu(e: MouseEvent) {
         <div v-for="group in navGroups" :key="group.title" class="nav-section">
           <div class="nav-section-title">{{ group.title }}</div>
           <button
-            v-for="item in group.items"
+            v-for="item in baseItems(group)"
             :key="item.route"
             class="nav-item"
-            :class="{ active: isActive(item), disabled: !item.check(), 'needs-upgrade': !item.check() && !item.disable }"
+            :class="{ active: isActive(item), disabled: !item.check() }"
             :aria-disabled="!item.check()"
-            :aria-label="!item.check() && !item.disable ? `${item.label}，需要升级 Pro 账户` : undefined"
             @click="navigate(item)"
           >
             <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
             <span class="nav-label">{{ item.label }}</span>
-            <span v-if="!item.check() && !item.disable" class="nav-lock" aria-hidden="true" title="需要升级 Pro 账户">🔒</span>
           </button>
+
+          <!-- 付费能力放二级：先让人看见「有什么」，而不是先撞墙 -->
+          <template v-if="proItems(group).length">
+            <button
+              class="nav-pro-toggle"
+              :aria-expanded="!!expandedPro[group.title]"
+              @click="expandedPro[group.title] = !expandedPro[group.title]"
+            >
+              <span class="nav-pro-caret" :class="{ open: !!expandedPro[group.title] }">▸</span>
+              Pro 能力
+              <span class="nav-pro-count">{{ proItems(group).length }}</span>
+            </button>
+            <template v-if="expandedPro[group.title]">
+              <button
+                v-for="item in proItems(group)"
+                :key="item.route"
+                class="nav-item nested"
+                :class="{ active: isActive(item), disabled: !item.check() }"
+                :aria-disabled="!item.check()"
+                :aria-label="!item.check() ? `${item.label}，需要升级 Pro 账户` : undefined"
+                @click="navigate(item)"
+              >
+                <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
+                <span class="nav-label">{{ item.label }}</span>
+                <span v-if="!item.check()" class="nav-lock" aria-hidden="true" title="需要升级 Pro 账户">🔒</span>
+              </button>
+            </template>
+          </template>
         </div>
       </nav>
 
@@ -400,6 +435,9 @@ function closeMobileMenu(e: MouseEvent) {
                 <div v-if="n.status !== 'read' && !n.readAt" class="notif-dot"></div>
               </div>
             </div>
+            <router-link to="/notifications" class="notif-all" @click="showNotifications = false">
+              查看全部通知 ›
+            </router-link>
           </div>
           <div v-if="auth.isLoggedIn" class="user-badge" aria-label="用户菜单">
             <div class="avatar">{{ auth.user?.email?.[0]?.toUpperCase() }}</div>
@@ -692,6 +730,66 @@ a { text-decoration: none; color: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-tertiary);
+}
+
+.nav-pro-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 12px;
+  margin-top: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.nav-pro-toggle:hover {
+  background: var(--brand-glow);
+  color: var(--brand-light);
+}
+
+.nav-pro-caret {
+  display: inline-block;
+  transition: transform 0.15s;
+  font-size: 9px;
+}
+
+.nav-pro-caret.open {
+  transform: rotate(90deg);
+}
+
+.nav-pro-count {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-item.nested {
+  min-height: 38px;
+  padding: 7px 12px 7px 22px;
+  font-size: 12px;
+  opacity: 0.92;
+}
+
+.notif-all {
+  display: block;
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--brand);
+  text-align: center;
+  text-decoration: none;
+}
+
+.notif-all:hover {
+  background: var(--brand-glow);
 }
 
 .nav-item {

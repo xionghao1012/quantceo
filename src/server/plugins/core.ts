@@ -7,6 +7,8 @@ import scanRoutes from '../routes/scan.js'
 import signalsRoutes from '../routes/signals.js'
 import watchlistRoutes from '../routes/watchlist.js'
 import marketStateRoutes from '../routes/marketState.js'
+import freshnessRoutes from '../routes/freshness.js'
+import digestRoutes from '../routes/digest.js'
 import rankingsRoutes from '../routes/rankings.js'
 import internalRoutes from '../routes/internal.js'
 import adminRoutes from '../routes/admin.js'
@@ -27,6 +29,8 @@ export const corePlugin: QuantPlugin = {
     { prefix: '/api/signals', router: signalsRoutes },
     { prefix: '/api/watchlist', router: watchlistRoutes },
     { prefix: '/api/market', router: marketStateRoutes },
+    { prefix: '/api/data', router: freshnessRoutes },
+    { prefix: '/api/digest', router: digestRoutes },
     { prefix: '/api/rankings', router: rankingsRoutes },
     { prefix: '/api/internal', router: internalRoutes },
     { prefix: '/api/admin', router: adminRoutes },

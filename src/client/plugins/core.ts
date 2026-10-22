@@ -36,37 +36,50 @@ export const corePlugin: FrontendPlugin = {
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFoundView.vue'), meta: { public: true } },
   ],
   navGroups: [
+    // 按「我要做的事」分组，不按数据库/功能分组：
+    // 散户一进来要回答的是「今天看什么 → 怎么挑 → 我的钱怎么样」，
+    // 不是「情绪指标 / 策略优化 / 选股筛选 Pro 我该点哪个」。
+    // Pro 能力由 App.vue 折叠到每个分组的二级（有 Pro 的人自动展开成平铺）。
     {
-      title: '行情',
+      title: '今天看什么',
       items: [
-        { label: '行情看板', icon: '◈', route: 'dashboard', check: () => true },
-        { label: '选股筛选', icon: '⊙', route: 'screener', check: () => true },
-        { label: '市场状态', icon: '◉', route: 'market-state', check: () => true },
-        { label: '指标排行', icon: '⊕', route: 'rankings', check: () => true },
+        { label: '今日决策台', icon: '◈', route: 'dashboard', check: () => true },
+        { label: '信号扫描', icon: '⊖', route: 'scan', check: () => true },
         { label: '涨停板汇总', icon: '▲', route: 'limit-up', check: () => true },
-        { label: '主力资金', icon: '◈', route: 'fund-flow', check: () => true },
+        { label: '主力资金', icon: '◍', route: 'fund-flow', check: () => true },
+        { label: '市场状态', icon: '◉', route: 'market-state', check: () => true },
+        { label: '个股分析', icon: '◎', route: 'detail', check: () => !!useStockStore().selectedCode, disable: true },
+      ],
+    },
+    {
+      title: '我要筛',
+      items: [
+        { label: '选股筛选', icon: '⊙', route: 'screener', check: () => true },
+        { label: '指标排行', icon: '⊕', route: 'rankings', check: () => true },
+        // 回测是全站第二大真实用量（463 次），之前根本不在侧栏里
+        { label: '回测', icon: '⊞', route: 'backtest', check: () => true },
+        { label: '策略回测分析', icon: '⊟', route: 'backtest-strategies', check: () => true },
+        { label: '推荐跟踪', icon: '⊘', route: 'rec-tracking', check: () => useAuthStore().isLoggedIn },
+      ],
+    },
+    {
+      title: '我的持仓与钱',
+      items: [
+        { label: '我的持仓', icon: '⊛', route: 'positions', check: () => useAuthStore().isLoggedIn },
+        { label: '自选股', icon: '⊚', route: 'watchlist', check: () => true },
+        { label: '持仓分析', icon: '◫', route: 'position-analysis', check: () => useAuthStore().isLoggedIn },
+        { label: '智能调仓', icon: '⊜', route: 'rebalance', check: () => useAuthStore().isLoggedIn },
         { label: '告警配置', icon: '🔔', route: 'fund-flow-alerts', check: () => useAuthStore().isLoggedIn },
         { label: '告警历史', icon: '📋', route: 'fund-flow-alerts-history', check: () => useAuthStore().isLoggedIn },
+        { label: '盘中异动', icon: '△', route: 'intraday-alerts', check: () => useAuthStore().isLoggedIn },
+        { label: '推送设置', icon: '☰', route: 'push-settings', check: () => useAuthStore().isLoggedIn },
+      ],
+    },
+    {
+      title: 'AI 与设置',
+      items: [
         { label: 'AI炒股大赛', icon: '🏆', route: 'paper-trading', check: () => true },
         { label: '历史比赛', icon: '📊', route: 'paper-trading-history', check: () => true },
-      ],
-    },
-    {
-      title: '分析',
-      items: [
-        { label: '个股分析', icon: '◎', route: 'detail', check: () => !!useStockStore().selectedCode, disable: true },
-        { label: '信号扫描', icon: '⊖', route: 'scan', check: () => true },
-      ],
-    },
-    {
-      title: '交易',
-      items: [
-        { label: '自选股', icon: '⊚', route: 'watchlist', check: () => true },
-      ],
-    },
-    {
-      title: '系统',
-      items: [
         { label: '个人中心', icon: '◈', route: 'profile', check: () => useAuthStore().isLoggedIn },
       ],
     },

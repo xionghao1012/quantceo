@@ -355,9 +355,9 @@ const enrichedPlans = computed(() => {
       featureItems: [
         { label: '行情看板', included: true },
         { label: '基础选股筛选', included: true },
-        { label: '自选股 10 只', included: true },
+        { label: '自选股 20 只', included: true },
         { label: '信号扫描（日 3 次）', included: true },
-        { label: '策略回测（日 1 次）', included: true },
+        { label: '策略回测（日 3 次）', included: true },
         { label: '指标排行', included: true },
         { label: '社区支持', included: true },
         { label: 'AI 策略发现', included: false },
@@ -376,13 +376,13 @@ const enrichedPlans = computed(() => {
       savingsPercent: 17,
       bestValue: true,
       featureItems: [
-        { label: '行情看板 + 历史K线', included: true },
+        { label: '自定义公式选股（1618 万行真实 K 线）', included: true },
         { label: '全部选股功能', included: true },
         { label: '自选股 100 只', included: true },
-        { label: '信号扫描（日 20 次）', included: true },
-        { label: '策略回测（日 20 次）', included: true },
+        { label: '信号扫描（无限）', included: true },
+        { label: '策略回测（日 50 次）', included: true },
         { label: '指标排行', included: true },
-        { label: '优先客服支持', included: true },
+        { label: '主力资金异动监控', included: true },
         { label: 'AI 策略发现', included: true, tip: 'ai-discover' },
         { label: '风险控制工具', included: true, tip: 'var' },
         { label: '高级选股 Pro', included: true },
@@ -403,11 +403,10 @@ const enrichedPlans = computed(() => {
         { label: '无限回测 & 扫描', included: true },
         { label: '自选股 500 只', included: true },
         { label: 'API 接入', included: true, tip: 'api' },
-        { label: '实时推送（微信+App）', included: true },
-        { label: 'AI 策略推荐', included: true },
+        { label: '实时推送（微信）', included: true },
+        { label: 'AI 策略发现', included: true },
+        { label: '因子回测与行业对比', included: true },
         { label: '优先体验新功能', included: true },
-        { label: '定制数据接入', included: true },
-        { label: '优先客服支持', included: true },
       ],
     },
   ]
@@ -417,7 +416,11 @@ const enrichedPlans = computed(() => {
       .filter((p: any) => p.id === 'free' || p.id === 'pro' || p.id === 'premium')
       .map((p: any) => {
         const def = defaultPlans.find((d) => d.id === p.id)
-        return { ...def, ...p }
+        // 服务端下发了 features 就用它，避免页面上的卖点和真实套餐对不上
+        const featureItems = Array.isArray(p.features) && p.features.length
+          ? p.features.map((label: string) => ({ label, included: true }))
+          : def?.featureItems || []
+        return { ...def, ...p, featureItems }
       })
   }
   return defaultPlans
@@ -427,9 +430,9 @@ const comparisonRows = [
   { label: '行情看板', free: true, pro: true, premium: true },
   { label: '选股筛选', free: true, pro: true, premium: true },
   { label: '指标排行', free: true, pro: true, premium: true },
-  { label: '策略回测', free: '1次/日', pro: '20次/日', premium: '无限', tip: 'backtest' },
-  { label: '信号扫描', free: '3次/日', pro: '20次/日', premium: '无限' },
-  { label: '自选股上限', free: '10只', pro: '100只', premium: '500只' },
+  { label: '策略回测', free: '3次/日', pro: '50次/日', premium: '无限', tip: 'backtest' },
+  { label: '信号扫描', free: '3次/日', pro: '无限', premium: '无限' },
+  { label: '自选股上限', free: '20只', pro: '100只', premium: '500只' },
   { label: '高级选股 Pro', free: false, pro: true, premium: true },
   { label: '因子回测', free: false, pro: true, premium: true, tip: 'factor' },
   { label: 'AI 策略发现', free: false, pro: true, premium: true, tip: 'ai-discover' },
@@ -448,8 +451,8 @@ const comparisonRows = [
   { label: '推送通知', free: false, pro: true, premium: true },
   { label: 'API 接入', free: false, pro: false, premium: true },
   { label: '优先新功能', free: false, pro: false, premium: true },
-  { label: '定制数据接入', free: false, pro: false, premium: true },
-  { label: '客服支持', free: '社区', pro: '优先', premium: '邮件支持' },
+  { label: '因子回测与行业对比', free: false, pro: true, premium: true },
+  { label: '客服支持', free: '社区', pro: '优先', premium: '优先' },
 ]
 
 onMounted(async () => {

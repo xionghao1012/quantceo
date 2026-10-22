@@ -2,6 +2,8 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStockStore } from '../stores/stock'
+import DataFreshness from '../components/DataFreshness.vue'
+import TodayBrief from '../components/TodayBrief.vue'
 
 
 const router = useRouter()
@@ -14,6 +16,8 @@ const fetchError = ref('')
 const page = ref(1)
 const PAGE_SIZE = 200
 const indices = ref<any[]>([])
+// 全市场涨跌家数：由服务端按 daily_metrics 最新一天统计（指数接口没有这个字段）
+const breadth = ref<{ up: number; down: number; flat: number; total: number } | null>(null)
 const indicesLoading = ref(true)
 const hotSectors = ref<any[]>([])
 const marketDate = ref('')
@@ -83,6 +87,7 @@ async function fetchIndices() {
       const data = await idxRes.json()
       indices.value = data.indices || []
       marketDate.value = data.marketDate || ''
+      breadth.value = data.breadth || null
     }
     if (sectorRes.ok) {
       const data = await sectorRes.json()
@@ -130,11 +135,15 @@ function stockQuote(code: string) {
       <span class="loading-phase">{{ loadingPhase }} {{ store.stockList.length > 0 ? store.stockList.length + '只' : '' }}</span>
     </div>
 
+    <!-- 今日速览：先回答「今天看什么」「我的持仓有没有事」 -->
+    <TodayBrief v-if="!store.searchQuery" />
+
     <!-- Market Indices -->
     <div class="market-hero-wrap" v-if="!store.searchQuery && loaded">
       <div class="market-hero-header">
         <span class="market-hero-title">大盘指数</span>
         <span class="market-hero-date" v-if="marketDate">{{ marketDate }}</span>
+        <DataFreshness compact />
       </div>
       <div class="market-hero">
         <div
@@ -180,13 +189,13 @@ function stockQuote(code: string) {
         <span class="stat-label">总股票数</span>
         <span class="stat-value">{{ store.stockList.length }}</span>
       </div>
-      <div v-if="indices.length" class="stat-card">
+      <div v-if="breadth" class="stat-card">
         <span class="stat-label">上涨家数</span>
-        <span class="stat-value up-text">{{ indices.reduce((a, i) => a + Math.max(0, i.rise || 0), 0).toLocaleString() }}</span>
+        <span class="stat-value up-text">{{ breadth.up.toLocaleString() }}</span>
       </div>
-      <div v-if="indices.length" class="stat-card">
+      <div v-if="breadth" class="stat-card">
         <span class="stat-label">下跌家数</span>
-        <span class="stat-value down-text">{{ indices.reduce((a, i) => a + Math.max(0, i.fall || 0), 0).toLocaleString() }}</span>
+        <span class="stat-value down-text">{{ breadth.down.toLocaleString() }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">当前筛选</span>

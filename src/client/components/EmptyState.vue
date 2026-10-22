@@ -8,6 +8,8 @@ defineProps<{
   /** 插图变体：默认是「空列表」 */
   variant?: 'list' | 'search' | 'alert'
   text?: string
+  /** 为什么是空的 + 下一步该做什么（一句话，别写成说明书） */
+  hint?: string
 }>()
 </script>
 
@@ -40,6 +42,7 @@ defineProps<{
       </template>
     </svg>
     <p v-if="text" class="empty-text">{{ text }}</p>
+    <p v-if="hint" class="empty-hint">{{ hint }}</p>
     <slot />
   </div>
 </template>
@@ -64,5 +67,15 @@ defineProps<{
 .empty-text {
   margin: 0;
   font-size: 13px;
+}
+
+.empty-hint {
+  margin: -4px 0 0;
+  max-width: 38ch;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-tertiary);
+  opacity: 0.8;
 }
 </style>

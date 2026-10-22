@@ -123,6 +123,9 @@ async function init() {
     ALTER TABLE signals ADD COLUMN IF NOT EXISTS indicators JSONB NOT NULL DEFAULT '{}';
     ALTER TABLE signals ALTER COLUMN indicators SET DEFAULT '{}';
     ALTER TABLE signals ALTER COLUMN reason SET DEFAULT '';
+    -- 老版本遗留的 date 列（NOT NULL 且无默认值），现在的代码只写 scan_date，
+    -- 留着它会让每一次插入都违反非空约束 → 信号扫描天天 0 产出且被记成 success
+    ALTER TABLE signals DROP COLUMN IF EXISTS date;
 
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,

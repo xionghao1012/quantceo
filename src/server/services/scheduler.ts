@@ -54,7 +54,7 @@ function getBoard(code: string, exchange: string): string {
 }
 
 export async function computeDailyMetrics(metricDate?: string): Promise<number> {
-  const finalDate = metricDate || new Date().toISOString().split('T')[0]
+  const finalDate = metricDate || today()
   const allStocks = await getStocksRepository().findAll()
   const BATCH = 50
   let computed = 0
@@ -139,6 +139,11 @@ export async function computeDailyMetrics(metricDate?: string): Promise<number> 
     }))
     console.log(`[Metrics] ${Math.min(i + BATCH, allStocks.length)}/${allStocks.length}...`)
   }
+  // 和信号扫描同样的道理：0 产出被记成 success，catch-up 就永远不再重试，
+  // 指标排行/选股筛选会静默停在旧日期上
+  if (allStocks.length > 0 && computed === 0) {
+    throw new Error(`日指标计算失败：${allStocks.length} 只股票一只都没算出来`)
+  }
   console.log(`[Scheduler] Daily metrics computed: ${computed}/${allStocks.length} stocks`)
   return computed
 }
@@ -146,6 +151,9 @@ export async function computeDailyMetrics(metricDate?: string): Promise<number> 
 async function signalScanForDate(scanDate: string): Promise<number> {
   const allStocks = await getStocksRepository().findAll()
   let signalsWritten = 0
+  let stocksExamined = 0
+  let writeErrors = 0
+  let firstWriteError = ''
   const BATCH_SIZE = 50
   for (let i = 0; i < allStocks.length; i += BATCH_SIZE) {
     const chunk = allStocks.slice(i, i + BATCH_SIZE)
@@ -160,7 +168,9 @@ async function signalScanForDate(scanDate: string): Promise<number> {
       })
     )
     for (const result of results) {
-      if (result.status !== 'fulfilled' || !result.value) continue
+      if (result.status !== 'fulfilled') continue
+      stocksExamined++
+      if (!result.value) continue
       const { s, scanned } = result.value
       for (const sig of scanned.signals) {
         try {
@@ -171,10 +181,29 @@ async function signalScanForDate(scanDate: string): Promise<number> {
             price: String(scanned.price), reason: `${sig.strategyName} ${sig.direction}`,
           })
           signalsWritten++
-        } catch {}
+        } catch (e: any) {
+          // 写入失败不能吞：之前这里 catch {} 让"每天 0 产出"被记成 success，
+          // 免费版第一卖点（信号扫描）静默死了一个多月都没人发现
+          writeErrors++
+          if (!firstWriteError) firstWriteError = e?.message || String(e)
+        }
       }
     }
   }
+  // 一只都没扫到 = 扫描链路坏了（K 线取不到 / 指标全 NaN）。
+  // 这种"0 结果"必须当失败记，否则 catch-up 会一直判定为 up-to-date，
+  // 免费版第一卖点（信号扫描）就静默死掉，没人发现。
+  if (allStocks.length > 0 && stocksExamined === 0) {
+    throw new Error(`信号扫描失败：${allStocks.length} 只股票都没能取到 K 线`)
+  }
+  // 有信号却一条都写不进去 = 写库坏了（列约束/迁移问题），同样必须报失败
+  if (signalsWritten === 0 && writeErrors > 0) {
+    throw new Error(`信号扫描失败：产出信号但全部写入失败（${writeErrors} 次）：${firstWriteError}`)
+  }
+  if (writeErrors > 0) {
+    console.warn(`[Scheduler] Signal scan ${scanDate}: 有 ${writeErrors} 次写入失败（首个错误：${firstWriteError}）`)
+  }
+  console.log(`[Scheduler] Signal scan ${scanDate}: 检查 ${stocksExamined}/${allStocks.length}，产出 ${signalsWritten} 个信号`)
   return signalsWritten
 }
 
@@ -196,7 +225,7 @@ async function aiPredictionsForDate(predictDate: string): Promise<number> {
   await pro._ensure()
   const targetDate = new Date(predictDate + 'T00:00:00+08:00')
   targetDate.setDate(targetDate.getDate() + 1)
-  const targetDateStr = targetDate.toISOString().split('T')[0]
+  const targetDateStr = ymd(targetDate)
 
   const picks = pro.selectDailyPicks ? await pro.selectDailyPicks(30) : []
   const proUsers = await getUsersRepository().findProUsers()
@@ -331,20 +360,28 @@ async function checkPriceAlerts() {
   }
 }
 
-function today(): string { return new Date().toISOString().split('T')[0] }
+// 业务日期一律按北京时间取。toISOString() 是 UTC，凌晨 0-8 点会算成前一天；
+// 加上 8 小时后取 UTC 日期就是北京日期（不依赖容器时区）。
+function ymd(d: Date): string {
+  return new Date(d.getTime() + 8 * 3600 * 1000).toISOString().split('T')[0]
+}
+
+function today(): string { return ymd(new Date()) }
 
 async function getLastRunDate(taskName: string): Promise<string | null> {
   return getSchedulerLogRepository().findLastSuccess(taskName)
 }
 
-function getWeekdaysBetween(start: string, end: string): string[] {
+export function getWeekdaysBetween(start: string, end: string): string[] {
   const dates: string[] = []
   const cur = new Date(start + 'T00:00:00+08:00')
   const last = new Date(end + 'T00:00:00+08:00')
   while (cur <= last) {
-    const day = cur.getDay()
-    if (day !== 0 && day !== 6) dates.push(cur.toISOString().split('T')[0])
-    cur.setDate(cur.getDate() + 1)
+    const d = ymd(cur)                                  // 北京日期
+    const day = new Date(d + 'T00:00:00Z').getUTCDay()  // 这一天是周几
+    if (day !== 0 && day !== 6) dates.push(d)
+    // 按毫秒推进，不受容器时区/夏令时影响
+    cur.setTime(cur.getTime() + 24 * 3600 * 1000)
   }
   return dates
 }
@@ -443,59 +480,20 @@ export function startScheduler() {
 
   cron.schedule('30 18 * * 1-5', async () => {
     console.log('[Scheduler] Starting daily signal scan...')
-    const allStocks = await getStocksRepository().findAll()
-    const scanDate = new Date().toISOString().split('T')[0]
-    let signalsWritten = 0
-    let stocksScanned = 0
-    const BATCH_SIZE = 50
+    const scanDate = today()
 
     await getSchedulerLogRepository().insertStart('signal_scan', scanDate)
 
-    const stockChunks = []
-    for (let i = 0; i < allStocks.length; i += BATCH_SIZE) {
-      stockChunks.push(allStocks.slice(i, i + BATCH_SIZE))
+    // 扫描逻辑只有一份（signalScanForDate），cron 和 catch-up 走同一条路，
+    // 免得两边行为不一致（之前 cron 抄了一份，catch-up 那份坏了 cron 那份没坏）
+    let signalsWritten = 0
+    try {
+      signalsWritten = await signalScanForDate(scanDate)
+    } catch (e: any) {
+      await getSchedulerLogRepository().upsertEnd('signal_scan', scanDate, 0, e.message)
+      console.error('[Scheduler] Signal scan failed:', e.message)
+      return
     }
-
-    for (const chunk of stockChunks) {
-      const results = await Promise.allSettled(
-        chunk.map(async (s) => {
-          try {
-            const cache = await getOrFetchKlines(s.code)
-            const scanned = scanStock(s.code, s.name, cache.klines)
-            if (!scanned) return null
-            return { s, scanned }
-          } catch {
-            return null
-          }
-        })
-      )
-
-      for (const result of results) {
-        if (result.status !== 'fulfilled' || !result.value) continue
-        const { s, scanned } = result.value
-        stocksScanned++
-
-        for (const sig of scanned.signals) {
-          try {
-            await getSignalsRepository().create({
-              code: s.code,
-              name: s.name,
-              scanDate,
-              strategyId: sig.strategyId,
-              strategyName: sig.strategyName,
-              direction: sig.direction,
-              strength: sig.strength,
-              price: String(scanned.price),
-              reason: `${sig.strategyName} ${sig.direction}`,
-            })
-            signalsWritten++
-          } catch {}
-        }
-      }
-
-      console.log(`[Scheduler] Scanned ${stocksScanned}/${allStocks.length} stocks...`)
-    }
-    console.log(`[Scheduler] Signal scan complete. Scanned: ${stocksScanned}, Signals written: ${signalsWritten}`)
 
     if (signalsWritten > 0) {
       const latestSignals = await getSignalsRepository().findByDate(scanDate, 100)
@@ -510,7 +508,7 @@ export function startScheduler() {
       pro.dispatchPush && await pro.dispatchPush({ type: 'signal', signals: signalItems })
       console.log(`[Scheduler] Push dispatched for ${signalItems.length} signals`)
 
-      pro.dispatchPush && await pro.dispatchPush({ type: 'dailyDigest', signals: signalItems, digestText: `今日共扫描 ${stocksScanned} 只股票，产生 ${signalsWritten} 个信号` })
+      pro.dispatchPush && await pro.dispatchPush({ type: 'dailyDigest', signals: signalItems, digestText: `今日共产生 ${signalsWritten} 个信号` })
       console.log(`[Scheduler] Daily digest dispatched`)
     }
     await getSchedulerLogRepository().upsertEnd('signal_scan', scanDate, signalsWritten)
@@ -666,7 +664,7 @@ export function startScheduler() {
         SELECT config FROM strategies WHERE config->>'type' = 'scoring_strategy'
       `)
 
-      const today = new Date().toISOString().split('T')[0]
+      const today = ymd(new Date())
 
       const { rows: earliest } = await db.execute(sql`
         SELECT MIN(metric_date) AS d FROM daily_metrics

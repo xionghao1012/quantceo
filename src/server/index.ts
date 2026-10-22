@@ -1,3 +1,8 @@
+// 业务时间一律按北京时间：cron 写的 9-15 点是 A 股交易时段、18:30 是收盘后扫描。
+// 容器默认 UTC 会让整套定时任务整体晚 8 小时（盘中告警跑到收盘后，日数据跑到次日凌晨）。
+// 必须在任何 Date 调用之前设置。
+process.env.TZ = process.env.TZ || 'Asia/Shanghai'
+
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
@@ -6,6 +11,7 @@ import rateLimit from 'express-rate-limit'
 import compression from 'compression'
 import http from 'http'
 import path from 'path'
+import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { registerPlugins, asyncRouter } from './plugin.js'
 import { corePlugin } from './plugins/core.js'
@@ -102,6 +108,15 @@ try {
   evaluatePredictions(today).catch(() => {})
 } catch { /* Predict module not available in OSS */ }
 
+// 每次构建写入的标识（deploy-prod.sh 写），用来确认线上跑的是哪次构建
+function readBuildId(): string {
+  try {
+    return readFileSync(path.join(__dirname, '..', 'BUILD_ID'), 'utf-8').trim() || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 app.get('/api/health', async (_req, res) => {
   let pgOk = false, redisOk = false
   try {
@@ -116,6 +131,7 @@ app.get('/api/health', async (_req, res) => {
     status: pgOk && redisOk ? 'ok' : 'degraded',
     service: SERVICE_NAME,
     uptime: process.uptime(),
+    buildId: readBuildId(),
     dependencies: { postgres: pgOk, redis: redisOk },
     license: process.env.LICENSE_KEY ? 'pro' : 'free',
   })
