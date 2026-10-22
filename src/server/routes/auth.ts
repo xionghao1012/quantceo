@@ -48,7 +48,24 @@ const localHandlers: Record<string, (req: Request, res: Response) => Promise<any
   'change-password': localChangePassword,
 }
 
+/**
+ * SSO 是可选组件：SSO_URL 为空 = 明确关闭（直接用本地 handler），
+ * 连不上时熔断 30 秒，避免每次登录都白等一次连接失败。
+ * 之前的默认值是 localhost:3002，而生产根本没跑 SSO —— 每次认证都要
+ * 先失败一次再回落，万一以后把 SSO_URL 指向远程机器，每次登录要等到超时。
+ */
+let ssoDownUntil = 0
+
+function localFallback(req: Request, res: Response, path: string) {
+  const handler = localHandlers[path]
+  if (handler) handler(req, res)
+  else res.status(502).json({ error: '认证服务暂时不可用，请稍后重试' })
+}
+
 function proxyToSSO(req: Request, res: Response, path: string, opts: { method?: string; body?: boolean } = {}) {
+  if (!SSO_URL || Date.now() < ssoDownUntil) {
+    return localFallback(req, res, path)
+  }
   const url = `${SSO_URL}/api/auth/${path}`
   const options: RequestInit = {
     method: opts.method || req.method,
@@ -75,9 +92,8 @@ function proxyToSSO(req: Request, res: Response, path: string, opts: { method?: 
       res.json(data)
     })
     .catch(() => {
-      const handler = localHandlers[path]
-      if (handler) handler(req, res)
-      else res.status(502).json({ error: '认证服务暂时不可用，请稍后重试' })
+      ssoDownUntil = Date.now() + 30_000
+      localFallback(req, res, path)
     })
 }
 
