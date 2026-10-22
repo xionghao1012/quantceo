@@ -514,7 +514,7 @@ function closeMobileMenu(e: MouseEvent) {
           <router-link to="/refund-policy" class="footer-link">退款政策</router-link>
           <a href="mailto:435541900@qq.com" class="footer-link">联系我们</a>
         </nav>
-        <p class="footer-copy">© 2026 QuantCEO · 支付由 Paddle 处理</p>
+        <p class="footer-copy">© 2026 QuantCEO · 支付通过微信 / 支付宝完成</p>
       </footer>
 
       <AlertPopup />

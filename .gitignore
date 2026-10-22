@@ -5,3 +5,5 @@ prod/
 .superpowers/
 .vitest/
 exports/
+# 收款码图片（本机资产，不进 Git）
+src/server/data/payment-qr/

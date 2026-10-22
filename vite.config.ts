@@ -32,6 +32,8 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': `http://localhost:${process.env.VITE_API_PORT || '3001'}`,
+      // 收款码图片由 API 服务托管（生产同源；dev 需要代理，否则 404 变破图）
+      '/payment-qr': `http://localhost:${process.env.VITE_API_PORT || '3001'}`,
       '/api/sso/admin': `http://localhost:${process.env.VITE_SSO_PORT || '3002'}`,
     }
   },

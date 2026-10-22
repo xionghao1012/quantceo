@@ -181,16 +181,36 @@
         <div class="qr-modal">
           <button class="qr-close" @click="closeQrModal">&times;</button>
           <h3>升级套餐 · {{ qrPlan === 'pro' ? 'Pro 年付' : 'Premium 年付' }}</h3>
-          <p class="qr-hint">请联系邮箱发送付款截图和交易单号，我们验证后为您开通。</p>
 
-          <div class="qr-contact-box">
-            <p class="qr-contact-label">客服邮箱</p>
-            <p class="qr-contact-value">{{ qrContactEmail }}</p>
-          </div>
+          <!-- 配了收款码：扫码支付 -->
+          <template v-if="qrPlatforms.length">
+            <p class="qr-hint">扫码支付 {{ qrAmountText }}，付款后把交易单号填在下面，验证通过立即开通。</p>
+            <div v-if="qrPlatforms.length > 1" class="qr-tabs">
+              <button
+                v-for="p in qrPlatforms"
+                :key="p"
+                class="qr-tab"
+                :class="{ active: qrPlatform === p }"
+                @click="qrPlatform = p"
+              >{{ p === 'wechat' ? '微信支付' : '支付宝' }}</button>
+            </div>
+            <div class="qr-image-wrap">
+              <img :src="qrUrl" class="qr-image" :alt="qrPlatform === 'wechat' ? '微信收款码' : '支付宝收款码'" />
+            </div>
+            <p class="qr-amount">{{ qrAmountText }}<span class="qr-amount-unit">/年</span></p>
+          </template>
+
+          <!-- 没配收款码：走人工，别让用户对着空白弹窗发呆 -->
+          <template v-else>
+            <p class="qr-hint">在线收款通道正在开通中，可以联系客服人工开通（当天处理）。</p>
+            <div class="qr-contact-box">
+              <p class="qr-contact-label">客服邮箱</p>
+              <p class="qr-contact-value">{{ qrContactEmail }}</p>
+            </div>
+            <p class="qr-amount">{{ qrAmountText }}<span class="qr-amount-unit">/年</span></p>
+          </template>
 
           <div class="qr-form">
-            <label>套餐价格</label>
-            <div class="qr-amount">{{ qrPlan === 'pro' ? '¥299' : '¥23,992' }}</div>
             <label for="qr-order-id">交易单号 <span class="qr-required">*</span></label>
             <input
               id="qr-order-id"
@@ -277,7 +297,7 @@
         </div>
         <div class="price-note">
           <h3>运营方信息</h3>
-          <p>QuantCEO 由 <strong>XIONG HAO</strong> 运营 · 支付由 <strong>Paddle</strong> (paddle.com) 处理 · 联系 <a href="mailto:435541900@qq.com">435541900@qq.com</a></p>
+          <p>QuantCEO 由 <strong>XIONG HAO</strong> 运营 · 支付通过<strong>微信 / 支付宝</strong>完成，人工核对后开通 · 联系 <a href="mailto:435541900@qq.com">435541900@qq.com</a></p>
         </div>
       </div>
 
@@ -305,6 +325,30 @@ const loading = ref(true)
 const upgrading = ref<string | null>(null)
 const qrPlan = ref<string | null>(null)  // 'pro' | 'premium' | null
 const qrContactEmail = ref<string>('')
+// 收款码：{ wechat: {proUrl, premiumUrl}, alipay: {...} }
+const qrMethods = ref<any>(null)
+const qrPlatform = ref<'wechat' | 'alipay'>('wechat')
+// 当前套餐 + 当前支付方式对应的收款码地址
+const qrUrl = computed(() => {
+  const m = qrMethods.value
+  if (!m || !qrPlan.value) return ''
+  const bucket = m[qrPlatform.value]
+  if (!bucket) return ''
+  return (qrPlan.value === 'pro' ? bucket.proUrl : bucket.premiumUrl) || ''
+})
+// 哪些支付方式配了收款码（没配的不显示 tab）
+const qrPlatforms = computed(() => {
+  const m = qrMethods.value
+  if (!m || !qrPlan.value) return [] as Array<'wechat' | 'alipay'>
+  return (['wechat', 'alipay'] as const).filter((p) => {
+    const b = m[p]
+    return !!(b && (qrPlan.value === 'pro' ? b.proUrl : b.premiumUrl))
+  })
+})
+const qrAmountText = computed(() => {
+  const p = plans.value.find((x: any) => x.id === qrPlan.value)
+  return p ? `¥${(p.price / 100).toLocaleString()}` : ''
+})
 const qrOrderId = ref<string>('')  // 用户填写订单号
 const qrNote = ref<string>('')
 const error = ref('')
@@ -505,8 +549,15 @@ async function openQrModal(planId: string) {
   try {
     const res = await fetch('/api/subscription/payment-methods')
     const methods = await res.json()
+    qrMethods.value = methods
     qrContactEmail.value = methods.contactEmail || '435541900@qq.com'
     qrPlan.value = planId
+    // 默认选第一个真的配了图的支付方式，避免默认停在空 tab 上
+    const available = (['wechat', 'alipay'] as const).filter((p) => {
+      const b = methods[p]
+      return !!(b && (planId === 'pro' ? b.proUrl : b.premiumUrl))
+    })
+    qrPlatform.value = available[0] || 'wechat'
     qrOrderId.value = ''
     qrNote.value = ''
     error.value = ''
@@ -530,7 +581,7 @@ async function submitQrOrder() {
       headers: { 'Content-Type': 'application/json', ...auth.authHeaders() },
       body: JSON.stringify({
         plan: qrPlan.value,
-        platform: 'wechat',
+        platform: qrPlatform.value,
         orderId: qrOrderId.value.trim(),
         note: qrNote.value.trim() || undefined,
       }),
@@ -784,6 +835,19 @@ async function cancelSubscription() {
 }
 .qr-modal h3 { margin: 0 0 4px; font-size: 18px; color: var(--text-primary); }
 .qr-hint { font-size: 13px; color: var(--text-secondary); margin: 0 0 16px; }
+.qr-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; }
+.qr-tab {
+  padding: 6px 14px; font-size: 13px; cursor: pointer;
+  background: var(--bg-muted); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.qr-tab.active { background: var(--brand-glow); color: var(--brand); border-color: var(--brand); font-weight: 600; }
+.qr-image-wrap {
+  display: flex; justify-content: center; padding: 10px;
+  background: #fff; border-radius: var(--radius-md); width: fit-content; margin: 0 auto 8px;
+}
+.qr-image { width: 200px; height: 200px; object-fit: contain; display: block; }
+.qr-amount-unit { font-size: 13px; font-weight: 400; color: var(--text-muted); margin-left: 2px; }
 .qr-contact-box { text-align: center; margin-bottom: 20px; padding: 16px; background: var(--bg-muted); border-radius: var(--radius-md); }
 .qr-contact-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
 .qr-contact-value { font-size: 18px; font-weight: 600; color: var(--accent); }

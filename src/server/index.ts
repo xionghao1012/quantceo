@@ -56,6 +56,15 @@ app.use('/api/', limiter)
 const distDir = path.resolve(__dirname, '../../dist/client')
 app.use(express.static(distDir, { index: false, maxAge: '1y', immutable: true }))
 
+// 收款码图片：只暴露 data/payment-qr 这一个目录（不进 Git、不进开源仓）。
+// 用户把 微信/支付宝 的收款码截图丢进去，env 里配成 /payment-qr/xxx.png 即可。
+// 注意路径：编译后 __dirname 是 dist/server，源文件在 ../../src/server/data；
+// dev 下 tsx 直接跑 src/server，同样两个 .. 回到项目根 —— 两边都成立。
+const QR_DIR = process.env.PAYMENT_QR_DIR || path.join(__dirname, '../../src/server/data/payment-qr')
+app.use('/payment-qr', express.static(QR_DIR, { maxAge: '10m' }))
+// 图片缺失要 404，不要掉进 SPA 兜底返回 HTML（那样排查时只会看到一张破图）
+app.use('/payment-qr', (_req, res) => { res.status(404).end() })
+
 // API routes via plugins
 const plugins = [corePlugin]
 
