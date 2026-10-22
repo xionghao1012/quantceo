@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { eq, and, desc, gte, count } from 'drizzle-orm'
 import { db } from '../db/db.js'
 import { signals } from '../db/schema.js'
+import { todayCN, ymdCN } from '../utils/date.js'
 
 const router = Router()
 
@@ -27,7 +28,7 @@ router.get('/stats', async (req, res) => {
   const { strategyId, days = '30' } = req.query as Record<string, string>
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - Number(days))
-  const cutoffStr = cutoff.toISOString().split('T')[0]
+  const cutoffStr = ymdCN(cutoff)
 
   const conds = [gte(signals.scanDate, cutoffStr)]
   if (strategyId) conds.push(eq(signals.strategyId, Number(strategyId)))
@@ -46,7 +47,7 @@ router.get('/stats', async (req, res) => {
 })
 
 router.get('/today', async (_req, res) => {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayCN()
   const rows = await db.select()
     .from(signals)
     .where(eq(signals.scanDate, today))

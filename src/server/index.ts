@@ -102,7 +102,7 @@ try {
 }
 
 // Evaluate predictions on startup (Pro only)
-const today = new Date().toISOString().slice(0, 10)
+const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
 try {
   const { evaluatePredictions } = await import('./ai/predict.js')
   evaluatePredictions(today).catch(() => {})

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { eq, desc, asc, and, sql } from 'drizzle-orm'
 import { db } from '../db/db.js'
 import { dailyMetrics, strategies as strategiesTable } from '../db/schema.js'
+import { todayCN } from '../utils/date.js'
 
 const router = Router()
 
@@ -85,7 +86,7 @@ function invalidateStrategiesCache() {
 
 router.get('/', async (req, res) => {
   try {
-    const date = req.query.date as string || new Date().toISOString().split('T')[0]
+    const date = req.query.date as string || todayCN()
     const board = (req.query.board as string) || 'all'
     const metric = (req.query.metric as string) || 'rsi'
     const limit = Math.min(Number(req.query.limit) || 100, 200)
@@ -169,7 +170,7 @@ router.get('/', async (req, res) => {
 
 router.get('/strategies', async (req, res) => {
   try {
-    const date = req.query.date as string || new Date().toISOString().split('T')[0]
+    const date = req.query.date as string || todayCN()
     const board = (req.query.board as string) || 'all'
     const strategyKey = (req.query.strategy as string) || 'oversold_reversal'
     const limit = Math.min(Number(req.query.limit) || 100, 200)

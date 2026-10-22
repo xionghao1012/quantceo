@@ -223,9 +223,7 @@ async function aiDailyPicksForDate(pickDate: string): Promise<number> {
 
 async function aiPredictionsForDate(predictDate: string): Promise<number> {
   await pro._ensure()
-  const targetDate = new Date(predictDate + 'T00:00:00+08:00')
-  targetDate.setDate(targetDate.getDate() + 1)
-  const targetDateStr = ymd(targetDate)
+  const targetDateStr = nextTradingDay(predictDate)
 
   const picks = pro.selectDailyPicks ? await pro.selectDailyPicks(30) : []
   const proUsers = await getUsersRepository().findProUsers()
@@ -239,6 +237,8 @@ async function aiPredictionsForDate(predictDate: string): Promise<number> {
   const { loadKlines, predictOne, savePrediction } = await import('../ai/predict.js')
   const { getMoneyFlow5d } = await import('./moneyFlowService.js')
   let ok = 0
+  let failed = 0
+  let firstError = ''
   for (const code of allHoldings) {
     try {
       const klines = await loadKlines(code, 90)
@@ -249,8 +249,17 @@ async function aiPredictionsForDate(predictDate: string): Promise<number> {
       await savePrediction(code, '', predictDate, targetDateStr, last.close, result)
       ok++
       await new Promise(r => setTimeout(r, 200))
-    } catch {}
+    } catch (e: any) {
+      // 不能吞：之前这里 catch {} 让「模型名写错 + 资金流 null 崩溃」这种
+      // 全量失败被记成 success/0 产出，AI 预测静默死了一个多月
+      failed++
+      if (!firstError) firstError = e?.message || String(e)
+    }
   }
+  if (allHoldings.size > 0 && ok === 0 && failed > 0) {
+    throw new Error(`AI 预测全部失败（${failed} 只）：${firstError}`)
+  }
+  if (failed > 0) console.warn(`[Scheduler] AI 预测 ${predictDate}: ${failed} 只失败（首个错误：${firstError}）`)
   return ok
 }
 
@@ -367,6 +376,15 @@ function ymd(d: Date): string {
 }
 
 function today(): string { return ymd(new Date()) }
+
+/** 下一个交易日：至少跳过周末（节假日由 evaluatePredictions 兜） */
+export function nextTradingDay(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00Z')
+  do {
+    d.setTime(d.getTime() + 24 * 3600 * 1000)
+  } while ([0, 6].includes(d.getUTCDay()))
+  return d.toISOString().slice(0, 10)
+}
 
 async function getLastRunDate(taskName: string): Promise<string | null> {
   return getSchedulerLogRepository().findLastSuccess(taskName)
