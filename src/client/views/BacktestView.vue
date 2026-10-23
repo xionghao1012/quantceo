@@ -7,6 +7,7 @@ import '../echarts-setup.js'
 import type { BacktestResult } from '@shared/types'
 import { useStockStore } from '../stores/stock'
 import TermTip from '../components/TermTip.vue'
+import { defaultBacktestRange } from '@shared/dateRange'
 
 const router = useRouter()
 const route = useRoute()
@@ -18,13 +19,18 @@ const code = ref('000001')
 const strategyId = ref(1)
 const customStrategyId = ref<number | null>(null)
 // 从策略擂台带过来的规则（?rules=<base64>），直接用这套规则跑回测
+const stockLoading = ref(false)
+const stockLoadError = ref('')
 const directRules = ref<any[] | null>(null)
 const directRulesName = ref('')
 const useCustomStrategy = ref(false)
 const strategies = ref<{ id: number; name: string }[]>([])
-const startDate = ref('2025-01-01')
-const endDate = ref('2026-01-01')
-const capital = ref(100000)
+// 默认区间 = 今天 ~ 一年前（不是写死的 2025-01-01，那会随时间长霉）
+const _defaultRange = defaultBacktestRange()
+const startDate = ref(_defaultRange.startDate)
+const endDate = ref(_defaultRange.endDate)
+// 10 万买不起一手高价股（茅台一手 13 万）→ 回测出 0 笔，用户以为策略没触发
+const capital = ref(1000000)
 const result = ref<BacktestResult | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -97,7 +103,13 @@ async function applyOptimizedParams(r: any) {
         initialCapital: capital.value, rules, strategyName: templateName,
       }),
     })
-    if (!res.ok) throw new Error(`请求失败 (${res.status})`)
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}))
+      const msg = detail?.error === 'No data'
+        ? '这只股票在这个区间内没有 K 线数据，换一段区间或换一只股票'
+        : (detail?.error || `请求失败 (${res.status})`)
+      throw new Error(msg)
+    }
     const data: BacktestResult = await res.json()
     data.strategyName = templateName
     result.value = data
@@ -106,11 +118,32 @@ async function applyOptimizedParams(r: any) {
 }
 
 onMounted(async () => {
+  // 股票下拉依赖 store.stockList，而它只由首页填充 —— 直接访问本页会得到空下拉。
+  // 其余三个页面（AiDiscovery / AiPrediction / StrategyOptimizer）都有这行，本页漏了。
+  if (!store.stockList.length) {
+    stockLoadError.value = ''
+    stockLoading.value = true
+    store.fetchStockList()
+      .catch((e: any) => { stockLoadError.value = e?.message || '股票列表加载失败' })
+      .finally(() => { stockLoading.value = false })
+  }
+
   try {
     const res = await fetch('/api/stocks/strategies')
-    if (res.ok) strategies.value = await res.json()
+    if (res.ok) {
+      // 只列有 rules 的规则型策略：评分型策略在库里也有，选了必然报错
+      const all = await res.json()
+      strategies.value = (all || []).filter((s: any) => Array.isArray(s.config?.rules) && s.config.rules.length > 0)
+      // 默认 strategyId 写死 1，但库里不一定有 id=1（dev 是 7/8/9）→ 首次回测必然 404
+      if (strategies.value.length && !strategies.value.some((s: any) => s.id === strategyId.value)) {
+        strategyId.value = strategies.value[0].id
+      }
+    }
   } catch {}
 
+  if (typeof route.query.code === 'string' && /^\d{6}$/.test(route.query.code)) {
+    code.value = route.query.code
+  }
   if (typeof route.query.capital === 'string' && Number(route.query.capital) > 0) {
     capital.value = Number(route.query.capital)
   }
@@ -177,6 +210,18 @@ async function run() {
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 0 笔交易时给出具体原因，而不是让用户对着空图猜。
+ * 顺序：本金不足一手 → 区间内没数据 → 区间内没触发信号。
+ */
+function zeroTradesReason(): string | null {
+  const r = result.value
+  if (!r || (r.trades?.length ?? 0) > 0) return null
+  if (capital.value < 10000) return '初始本金太小（低于 1 万），连一手都买不了。'
+  if (!(r as any).equityCurve?.length) return '这个区间内没有这只股票的 K 线，换一个日期区间试试。'
+  return `这个区间内策略没有触发信号。可能原因：区间太短（至少覆盖 60 个交易日）、或条件太严。`
 }
 
 function downloadCSV() {
@@ -529,19 +574,25 @@ function viewStock(code: string) {
       <div class="control-row">
         <label>
           <span class="label-text">策略</span>
-          <select v-model="strategyId" :disabled="useCustomStrategy">
+          <select v-model="strategyId" :disabled="useCustomStrategy || !strategies.length">
             <option v-for="s in strategies" :key="s.id" :value="s.id">{{ s.name }}</option>
           </select>
         </label>
+        <span v-if="!strategies.length" class="stock-hint error">当前没有可回测的规则型策略</span>
         <div v-if="useCustomStrategy" class="custom-strategy-badge">
           <span>自定义策略 #{{ customStrategyId }}</span>
           <button class="clear-custom" @click="useCustomStrategy = false; customStrategyId = null" aria-label="清除">✕</button>
         </div>
         <label v-if="activeTab === 'single'">
           <span class="label-text">股票</span>
-          <select v-model="code">
+          <select v-model="code" :disabled="stockLoading">
             <option v-for="s in store.stockList" :key="s.code" :value="s.code">{{ s.name }} ({{ s.code }})</option>
           </select>
+          <span v-if="stockLoading" class="stock-hint">股票列表加载中…</span>
+          <span v-else-if="stockLoadError" class="stock-hint error">
+            {{ stockLoadError }}
+            <button class="retry-btn" @click="store.fetchStockList().then(() => { stockLoadError = '' }).catch((e: any) => { stockLoadError = e?.message })">重试</button>
+          </span>
         </label>
         <label>
           <span class="label-text">开始日期</span>
@@ -554,6 +605,7 @@ function viewStock(code: string) {
         <label>
           <span class="label-text">初始本金<TermTip term="initialCapital" /></span>
           <input type="number" v-model.number="capital" :min="10000" :step="10000" />
+          <span class="capital-hint">虚拟本金。默认 100 万：10 万买不起一手高价股，会跑出 0 笔交易</span>
         </label>
         <button v-if="activeTab !== 'optimize'" class="run-btn" @click="activeTab === 'single' ? run() : runPortfolio()" :disabled="(activeTab === 'single' ? loading : portfolioLoading) || !strategies.length">
           <span v-if="activeTab === 'single' ? loading : portfolioLoading" class="btn-spinner" />
@@ -586,6 +638,15 @@ function viewStock(code: string) {
           </button>
         </div>
         <div class="card chart-card"><div class="card-title">权益曲线</div><VChart :option="equityOption" style="height: 320px" autoresize /></div>
+        <div v-if="!result.trades?.length" class="card zero-trades">
+          <div class="zero-title">这笔回测没有产生交易</div>
+          <p class="zero-text">{{ zeroTradesReason() }}</p>
+          <div class="zero-actions">
+            <button class="relax-btn" @click="capital = 1000000">把本金调到 100 万</button>
+            <button class="relax-btn ghost" @click="startDate = defaultBacktestRange().startDate; endDate = defaultBacktestRange().endDate">重置为最近一年</button>
+          </div>
+        </div>
+
         <div v-if="result.trades.length" class="card trades-card">
           <div class="card-title">交易记录 ({{ result.trades.length }})</div>
           <div class="table-wrap">
@@ -913,6 +974,16 @@ function viewStock(code: string) {
 
 <style scoped>
 .backtest-view { padding: 20px; max-width: 1200px; margin: 0 auto; }
+.stock-hint { margin-left: 8px; font-size: 12px; color: var(--text-tertiary); }
+.zero-trades { padding: 18px 16px; }
+.zero-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.zero-text { margin: 0 0 10px; font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
+.zero-actions { display: flex; gap: 8px; }
+.relax-btn { padding: 5px 12px; font-size: 12px; cursor: pointer; background: var(--brand-glow); color: var(--brand); border: 1px solid var(--brand); border-radius: var(--radius-xs); }
+.relax-btn.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
+.capital-hint { display: block; margin-top: 2px; font-size: 11px; color: var(--text-tertiary); }
+.stock-hint.error { color: #ef4444; }
+.retry-btn { margin-left: 6px; font-size: 12px; padding: 2px 8px; cursor: pointer; background: transparent; border: 1px solid currentColor; color: inherit; border-radius: var(--radius-xs); }
 .rules-banner { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 14px; font-size: 13px; color: var(--brand); background: var(--brand-glow); border: 1px solid var(--brand); border-radius: var(--radius-sm); }
 .rules-clear { margin-left: auto; font-size: 12px; background: transparent; border: 1px solid var(--brand); color: var(--brand); border-radius: var(--radius-xs); padding: 2px 8px; cursor: pointer; }
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }

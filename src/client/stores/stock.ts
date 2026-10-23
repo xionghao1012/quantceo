@@ -24,9 +24,10 @@ export const useStockStore = defineStore('stock', () => {
     let offset = 0
     let batchIndex = 0
     const map: Record<string, StockInfo> = {}
+    let failed = false
     while (true) {
       const res = await fetch(`/api/stocks?limit=${PAGE}&offset=${offset}`)
-      if (!res.ok) break
+      if (!res.ok) { failed = true; break }
       const data = await res.json()
       if (!data.length) break
       for (const s of data) map[s.code] = s
@@ -36,6 +37,8 @@ export const useStockStore = defineStore('stock', () => {
       offset += PAGE
     }
     stockByCode.value = map
+    // 失败要能被页面感知：之前静默 break，页面只看到「下拉框是空的」
+    if (failed) throw new Error('股票列表加载失败，请检查网络后重试')
   }
 
   async function fetchQuotesForPage(codes: string[]) {

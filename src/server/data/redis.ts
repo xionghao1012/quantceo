@@ -22,6 +22,22 @@ const QUOTES_TTL = 30
 const MKLINE_PREFIX = 'mkline:'
 const MKLINE_TTL = 60 * 60
 
+export async function cacheGetJson(key: string): Promise<string | null> {
+  try {
+    return await redis.get(key)
+  } catch {
+    return null
+  }
+}
+
+export async function cacheSetJson(key: string, data: string, ttlSeconds: number): Promise<void> {
+  try {
+    await redis.set(key, data, 'EX', ttlSeconds)
+  } catch {
+    // Redis 不可用时降级为「每次都现算」，不影响正确性
+  }
+}
+
 export async function cacheGetKlines(code: string): Promise<string | null> {
   try {
     return await redis.get(`${KLINE_PREFIX}${code}`)

@@ -49,7 +49,15 @@ router.post('/', async (req, res) => {
   } else {
     const rows = await db.select().from(strategies).where(eq(strategies.id, strategyId!)).limit(1)
     if (!rows[0]) return res.status(404).json({ error: 'Strategy not found' })
-    rules = (rows[0].config as any).rules as any[]
+    // config 可能是 jsonb 对象，也可能是字符串（历史数据/测试 fixture）——两种都要能读
+    const cfg = typeof rows[0].config === 'string' ? JSON.parse(rows[0].config) : rows[0].config
+    rules = (cfg as any)?.rules as any[]
+  }
+
+  // 评分型策略（config 里只有 scoreSQL，没有 rules）在库里也存在，
+  // 直接进 runBacktest 会 `rules is not iterable` → 500。给它一个说得清的错误。
+  if (!Array.isArray(rules)) {
+    return res.status(400).json({ error: '该策略是评分型策略，暂不支持单票回测；请选择规则型策略' })
   }
 
   const result = runBacktest(klineData, { code: code!, strategyId: String(strategyId || userStrategyId), startDate: startDate!, endDate: endDate!, initialCapital: initialCapital! }, rules)

@@ -19,6 +19,10 @@ export function calcWarmup(needed: Set<string>): number {
 }
 
 export function runBacktest(klines: KLine[], req: BacktestRequest, rules: Rule[]): BacktestResult {
+  // 空数组合法（就是「永不买入」，得到 0 笔交易）；undefined/非数组才是配置错误
+  if (!Array.isArray(rules)) {
+    throw new Error('该策略没有可执行的买卖规则（评分型策略不支持单票回测）')
+  }
   const needed = extractNeededIndicators(rules)
   const lazy = new LazyIndicators(klines, needed)
 

@@ -26,6 +26,12 @@ const loading = ref(false)
 const error = ref('')
 const result = ref<{ total: number; page: number; limit: number; stocks: any[] } | null>(null)
 
+// 预置示例放在 shared，测试与客户端用同一份（字段必须在服务端白名单内）
+import { SCREENER_PRESETS as PRESETS } from '@shared/screenerPresets'
+
+const activePreset = ref<string>('')
+const relaxedHint = ref<{ dropped: string; total: number } | null>(null)
+
 const operators = ['>', '<', '==', 'between', 'cross_above', 'cross_below']
 const opLabels: Record<string, string> = {
   '>': '大于', '<': '小于', '==': '等于',
@@ -108,6 +114,34 @@ async function runScreener() {
   }
 }
 
+async function applyPreset(preset: typeof PRESETS[number]) {
+  activePreset.value = preset.key
+  conditions.value = preset.conditions.map(c => ({ ...c }))
+  moneyFlowConditions.value = []
+  sortField.value = preset.key === 'oversold' ? 'rsi' : 'change'
+  sortOrder.value = preset.key === 'oversold' ? 'asc' : 'desc'
+  relaxedHint.value = null
+  await runScreener()
+}
+
+/**
+ * 0 结果时放宽一次：去掉条件最多那组里最严格的一条，再跑一遍。
+ * 只重试一次，不循环 —— 避免给用户一个「一直转」的页面。
+ */
+async function relaxOnce() {
+  const dropped = conditions.value[conditions.value.length - 1]
+  if (!dropped || conditions.value.length <= 1) return
+  const label = fields.value.find(f => f.field === dropped.field)?.label || dropped.field
+  const backup = conditions.value.map(c => ({ ...c }))
+  conditions.value = conditions.value.slice(0, -1)
+  await runScreener()
+  if (result.value && result.value.total > 0) {
+    relaxedHint.value = { dropped: label, total: result.value.total }
+  } else {
+    conditions.value = backup
+  }
+}
+
 async function goPage(p: number) {
   if (p < 1 || p > totalPages.value) return
   page.value = p
@@ -157,6 +191,16 @@ function fmtVol(v: number) {
     <div class="page-header">
       <h1>选股筛选</h1>
       <DataFreshness />
+    </div>
+
+    <div class="preset-row">
+      <span class="preset-label">不知道筛什么？试试：</span>
+      <button
+        v-for="p in PRESETS" :key="p.key"
+        class="preset-chip" :class="{ active: activePreset === p.key }"
+        :disabled="loading" :title="p.hint"
+        @click="applyPreset(p)"
+      >{{ p.label }}</button>
     </div>
 
     <div class="card control-card">
@@ -248,7 +292,14 @@ function fmtVol(v: number) {
       </div>
 
       <div v-if="result.stocks.length === 0" class="empty-state">
-        <span>没有符合条件的股票</span>
+        <span>没有股票满足这组条件</span>
+        <p v-if="relaxedHint" class="relax-hint">
+          去掉「{{ relaxedHint.dropped }}」后有 {{ relaxedHint.total }} 只 —— 说明卡住结果的是这一个条件。
+        </p>
+        <div v-else class="relax-actions">
+          <button v-if="conditions.length > 1" class="relax-btn" @click="relaxOnce">放宽一个条件试试</button>
+          <button class="relax-btn ghost" @click="applyPreset(PRESETS[0])">改用「强势异动」示例</button>
+        </div>
       </div>
 
       <div v-if="result.stocks.length > 0" class="card">
@@ -282,6 +333,7 @@ function fmtVol(v: number) {
                 <td>
                   <div class="action-btns">
                     <button class="analyze-btn" @click="viewStock(s.code)">分析</button>
+                    <button class="analyze-btn ghost" @click="router.push({ path: '/backtest', query: { code: s.code } })">回测这只</button>
                     <button class="alert-btn" title="设置告警" @click="quickAlertStock = { code: s.code, name: s.name }">⚡</button>
                   </div>
                 </td>
@@ -314,6 +366,17 @@ function fmtVol(v: number) {
 
 <style scoped>
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.preset-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.preset-label { font-size: 12px; color: var(--text-tertiary); }
+.preset-chip { padding: 5px 12px; font-size: 12px; cursor: pointer; background: var(--bg-muted); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 999px; }
+.preset-chip:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.preset-chip.active { background: var(--brand-glow); color: var(--brand); border-color: var(--brand); font-weight: 600; }
+.preset-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+.relax-hint { margin: 6px 0 0; font-size: 12px; color: #f59e0b; }
+.relax-actions { display: flex; gap: 8px; margin-top: 8px; }
+.relax-btn { padding: 5px 12px; font-size: 12px; cursor: pointer; background: var(--brand-glow); color: var(--brand); border: 1px solid var(--brand); border-radius: var(--radius-xs); }
+.relax-btn.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
+.analyze-btn.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
 .page-header h1 { font-size: 18px; font-weight: 600; }
 
 .control-card { margin-bottom: 20px; padding: 16px 20px; }
