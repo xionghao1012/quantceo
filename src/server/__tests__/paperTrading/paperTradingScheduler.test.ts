@@ -325,14 +325,16 @@ describe('日终快照 — snapshotAllAccounts', () => {
     expect(state.onConflictSets[0].set).toHaveProperty('totalValue')
   })
 
-  it('无行情价的持仓按 0 计（NAV 会被低估）', async () => {
+  it('无行情价的持仓按成本估值，不按 0（否则净值曲线是假的）', async () => {
     state.accounts = [{ id: 1, competitionId: 1, agentId: 'deepseek', agentName: 'DeepSeek', cash: 500000 }]
     state.positions = [{ id: 1, accountId: 1, code: '999999', name: '未知', shares: 1000, avgCost: '100' }]
     state.prices = {} // 无任何行情
 
     await snapshotAllAccounts()
-    // 500000 + 0 = 500000 → nav 0.5（行为记录：缺价时低估，不报错）
-    expect(state.snapshots[0].nav).toBeCloseTo(0.5, 6)
+    // 500000 + 1000×100（成本） = 600000 → nav 0.6
+    // 之前按 0 算会得到 0.5，把「没有行情」写成「亏 50%」——
+    // 生产首日净值 0.70/0.77/0.80/0.85 就是这个 bug 造成的
+    expect(state.snapshots[0].nav).toBeCloseTo(0.6, 6)
   })
 
   it('多个账户各写一条快照', async () => {

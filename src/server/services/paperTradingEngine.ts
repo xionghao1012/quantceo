@@ -16,6 +16,7 @@ import {
 } from '../db/schema.js'
 import { eq, and, gte, sql, desc } from 'drizzle-orm'
 import { getRealtimeMoneyFlow } from './moneyFlowService.js'
+import { ymdCN } from '../utils/date.js'
 import { PAPER_STRATEGIES } from './paperStrategies.js'
 
 // 获取价格：实时资金流 → 资金流表 → K 线最新收盘（最后兜底）
@@ -369,7 +370,7 @@ export async function matchSingleOrder(order: any): Promise<MatchResult> {
 
 export async function snapshotAllAccounts(): Promise<void> {
   const accounts = await db.select().from(paperAccounts)
-  const today = new Date().toISOString().split('T')[0]
+  const today = ymdCN()
 
   for (const account of accounts) {
     const positions = await db.select().from(paperPositions)
@@ -377,8 +378,10 @@ export async function snapshotAllAccounts(): Promise<void> {
 
     let totalValue = Number(account.cash)
     for (const pos of positions) {
-      const price = await getPriceFromDB(pos.code) ?? 0
-      totalValue += price * pos.shares
+      // 必须走 getPrice（实时 → 资金流表 → K 线兜底）：getPriceFromDB 只查
+      // money_flow_realtime，生产是空表，会把持仓算成 0 —— 净值曲线第一天就是假的。
+      const quoted = await getPrice(pos.code)
+      totalValue += (quoted ?? Number(pos.avgCost)) * pos.shares
     }
 
     const compRows = await db.select().from(paperCompetitions)
