@@ -50,6 +50,12 @@ export async function runAgent(accountId: number): Promise<AgentRunResult> {
   // 统一用配置好的模型（之前 4 个 agentId 里只有 MiniMax 真的可用，
   // DeepSeek 没 key，Qwen/GPT-4o 都是回退 —— 名字却写在页面上，等于骗人）
   const strategy = getPaperStrategy(account.agentId)
+
+  // 对照组：纯机械执行，不调模型（用来检验 LLM 的增量价值）
+  if (strategy.engine === 'rule') {
+    return runRuleAgent(account, strategy)
+  }
+
   // ai/llm.js 在 OSS 版是 stub（AI 属 Pro）—— 动态加载，缺能力时明确报错而不是崩
   const llm: any = await import('../ai/llm.js')
   if (typeof llm.llmComplete !== 'function') {
@@ -111,6 +117,70 @@ export async function runAgent(accountId: number): Promise<AgentRunResult> {
   const trades = await executeAgentDecision(accountId, decision, model, candidateReasons, decisionReason)
 
   return { agentId: account.agentId, agentName: account.agentName, model, success: true, decision, trades }
+}
+
+/**
+ * 规则组（对照组）：不调模型，机械执行「买候选第一只 / 持有满 N 天卖出」。
+ * 目的是和同口径的 LLM 组对照 —— 如果模型没有增量，这里会给出同样的结果。
+ */
+async function runRuleAgent(account: any, strategy: PaperStrategy): Promise<AgentRunResult> {
+  const base = { agentId: account.agentId, agentName: account.agentName, model: 'rule(no-llm)' }
+  try {
+    const portfolio = await getAccountPortfolio(account.id)
+    if (!portfolio) throw new Error('Portfolio not found')
+    const trades: AgentRunResult['trades'] = []
+    const reasons: string[] = []
+
+    // 1) 持有满 holdDays（日历日，约等于 5 个交易日）→ 卖出
+    for (const pos of portfolio.positions) {
+      const firstBuy = await db.select({ filledAt: paperOrders.filledAt })
+        .from(paperOrders)
+        .where(and(
+          eq(paperOrders.accountId, account.id),
+          eq(paperOrders.code, pos.code),
+          eq(paperOrders.direction, 'BUY'),
+          eq(paperOrders.status, 'FILLED'),
+        ))
+        .orderBy(paperOrders.filledAt)
+        .limit(1)
+      const filledAt = firstBuy[0]?.filledAt
+      const heldDays = filledAt ? (Date.now() - new Date(filledAt).getTime()) / 86400000 : 0
+      if (heldDays >= (strategy.holdDays ?? 7)) {
+        const r = await submitOrder(account.id, 'SELL', pos.code, pos.name || pos.code, pos.shares, pos.currentPrice,
+          `规则：持有 ${Math.floor(heldDays)} 天到期`, '机械执行')
+        trades.push({ direction: 'SELL', code: pos.code, shares: pos.shares, result: r.ok ? 'FILLED(PENDING)' : `REJECTED:${r.error}` })
+        reasons.push(`卖出 ${pos.name || pos.code}（持有到期）`)
+      }
+    }
+
+    // 2) 空仓（或卖完后）→ 机械买候选第一只
+    if (portfolio.positions.length === 0) {
+      const candidates = await strategy.candidates()
+      const pick = candidates[0]
+      if (pick) {
+        const comp = (await db.select().from(paperCompetitions)
+          .where(eq(paperCompetitions.id, account.competitionId!)).limit(1))[0]
+        const maxRatio = Number(comp?.maxPositionRatio ?? 0.3)
+        const budget = Math.min(portfolio.cash * 0.9, portfolio.totalValue * maxRatio)
+        const shares = Math.floor(budget / pick.close / 100) * 100
+        if (shares >= 100) {
+          const r = await submitOrder(account.id, 'BUY', pick.code, pick.name, shares, pick.close,
+            `规则：候选第一只（${pick.reason}）`, pick.reason)
+          trades.push({ direction: 'BUY', code: pick.code, shares, result: r.ok ? 'FILLED(PENDING)' : `REJECTED:${r.error}` })
+          reasons.push(`买入 ${pick.name}（候选第一）`)
+        }
+      }
+    }
+
+    return {
+      ...base,
+      success: true,
+      decision: reasons.length ? reasons.join('；') : '规则：无动作（未到期 / 无候选）',
+      trades,
+    }
+  } catch (e: any) {
+    return { ...base, success: false, decision: '', trades: [], error: e.message }
+  }
 }
 
 /**

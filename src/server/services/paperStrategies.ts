@@ -31,6 +31,10 @@ export interface PaperStrategy {
   id: string
   name: string
   tagline: string
+  /** llm = 模型在候选里选；rule = 纯机械执行（对照组，不调模型） */
+  engine?: 'llm' | 'rule'
+  /** 规则组的机械持有天数（对照组用） */
+  holdDays?: number
   /** 自然语言规则，写进提示词，也直接显示给用户 */
   playbook: string[]
   /** 回测引擎能表达的规则（不能表达就是 null，页面不显示回测按钮） */
@@ -233,6 +237,55 @@ export const PAPER_STRATEGIES: PaperStrategy[] = [
   },
 ]
 
+/**
+ * 对照组：同样的候选口径，但**不调模型**，机械执行「买候选第一只、持有 N 天」。
+ * 用来回答一个行业里没人公开回答的问题：LLM 在「从 8 只里选 1 只」这件事上到底有没有增量。
+ */
+PAPER_STRATEGIES.push(
+  {
+    id: 'rule-trend',
+    name: '趋势跟随·规则组',
+    tagline: '对照组：不调模型，机械买候选第一只，持有 5 个交易日',
+    engine: 'rule',
+    holdDays: 7, // 约 5 个交易日
+    playbook: [
+      '选股：与「趋势跟随」完全相同的口径（MACD 柱为正 + 动量为正）',
+      '买入：机械买入候选第一只，不经过模型判断',
+      '卖出：持有满 5 个交易日后卖出',
+      '用途：和「趋势跟随」对照，检验模型选股有没有增量',
+    ],
+    backtestRules: null,
+    candidates: (codes?: string[]) => fromMetrics(
+      "m.macd_signal > 0 AND m.momentum > 0 AND m.momentum < 50",
+      'm.momentum DESC NULLS LAST',
+      8,
+      (r) => `动量 ${Number(r.momentum).toFixed(1)}，MACD 柱为正`,
+      codes,
+    ),
+  },
+  {
+    id: 'rule-reversion',
+    name: '均值回归·规则组',
+    tagline: '对照组：不调模型，机械买候选第一只，持有 5 个交易日',
+    engine: 'rule',
+    holdDays: 7,
+    playbook: [
+      '选股：与「均值回归」完全相同的口径（RSI < 40，按超跌排序）',
+      '买入：机械买入候选第一只，不经过模型判断',
+      '卖出：持有满 5 个交易日后卖出',
+      '用途：和「均值回归」对照，检验模型选股有没有增量',
+    ],
+    backtestRules: null,
+    candidates: (codes?: string[]) => fromMetrics(
+      'm.rsi < 40',
+      'm.rsi ASC NULLS LAST',
+      8,
+      (r) => `RSI ${Number(r.rsi).toFixed(0)}（超跌）`,
+      codes,
+    ),
+  },
+)
+
 export function getPaperStrategy(agentId: string): PaperStrategy {
   // agentId 在 paper_accounts 上是全局唯一的，所以第二届要用 trend-2 这种后缀。
   // 按最长前缀匹配，避免 'limit-up-2' 被 'limit' 之类的短 id 抢走。
@@ -249,6 +302,7 @@ export function strategyCatalog() {
     playbook: s.playbook,
     backtestRules: s.backtestRules,
     backtestNote: s.backtestNote,
+    engine: s.engine || 'llm',
     canBacktest: !!s.backtestRules,
   }))
 }

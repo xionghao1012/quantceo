@@ -151,6 +151,33 @@ export async function generateWeeklyReport(opts: {
     }
   }
 
+  // LLM 组 vs 同口径规则组（对照组）：这是这个擂台最有价值的数据
+  const pairs = [
+    { llm: '趋势跟随', rule: '趋势跟随·规则组' },
+    { llm: '均值回归', rule: '均值回归·规则组' },
+  ]
+  const compareLines: string[] = []
+  for (const pair of pairs) {
+    const a = rows.find(r => r.name === pair.llm)
+    const b = rows.find(r => r.name === pair.rule)
+    if (a && b) {
+      compareLines.push(`| ${pair.llm} | ${a.nav.toFixed(4)} | ${pct(a.weekReturn)} | ${a.trades} 笔 |`)
+      compareLines.push(`| ${pair.rule}（规则） | ${b.nav.toFixed(4)} | ${pct(b.weekReturn)} | ${b.trades} 笔 |`)
+    }
+  }
+  if (compareLines.length) {
+    lines.push('')
+    lines.push('## 对照：LLM 组 vs 纯规则组')
+    lines.push('')
+    lines.push('同一套候选口径，一边由模型从 8 只里挑 1 只，一边机械买第一只。')
+    lines.push('')
+    lines.push('| 策略 | 净值 | 本周 | 成交 |')
+    lines.push('|---|---|---|---|')
+    lines.push(...compareLines)
+    lines.push('')
+    lines.push('> 样本不足时这组对比也不能下结论，但这是唯一能回答「LLM 有没有增量」的公开数据。')
+  }
+
   lines.push('')
   lines.push('## 一句话')
   if (!enough) {

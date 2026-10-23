@@ -412,7 +412,10 @@ function navChartOption(history: any[]) {
               </template>
               <span v-else class="rank-num">·</span>
             </td>
-            <td><span class="agent-name">{{ r.agentName }}</span></td>
+            <td>
+              <span class="agent-name">{{ r.agentName }}</span>
+              <span v-if="r.agentId && r.agentId.startsWith('rule-')" class="control-badge">对照</span>
+            </td>
             <td class="num">{{ fmtMoney(r.totalValue) }}</td>
             <td class="num">{{ fmtMoney(r.positionValue) }}</td>
             <td class="num">{{ fmtMoney(r.cash) }}</td>
@@ -511,7 +514,10 @@ function navChartOption(history: any[]) {
       <div class="strategy-grid">
         <div v-for="st in strategies" :key="st.id" class="strategy-item">
           <div class="strategy-head">
-            <span class="strategy-name">{{ st.name }}</span>
+            <span class="strategy-name">
+              {{ st.name }}
+              <span v-if="st.engine === 'rule'" class="control-badge">对照组 · 无 AI</span>
+            </span>
             <span class="strategy-tag">{{ st.tagline }}</span>
           </div>
           <ul class="strategy-rules">
@@ -769,6 +775,7 @@ function navChartOption(history: any[]) {
 .strategy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 12px 16px 16px; }
 .strategy-item { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .strategy-head { display: flex; flex-direction: column; gap: 2px; }
+.control-badge { margin-left: 6px; padding: 1px 6px; font-size: 10px; font-weight: 500; color: #f59e0b; background: rgba(245,158,11,0.12); border-radius: 999px; }
 .strategy-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
 .strategy-tag { font-size: 11px; color: var(--text-tertiary); }
 .strategy-rules { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
