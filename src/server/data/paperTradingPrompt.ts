@@ -36,46 +36,26 @@ export interface StockData {
 /**
  * 生成 Agent 系统提示词
  */
-export function buildSystemPrompt(agentName: string): string {
-  return `你是 ${agentName}，一个专业的 A 股趋势交易 AI Agent。
+export function buildSystemPrompt(strategy: { name: string; tagline: string; playbook: string[] }): string {
+  const rules = strategy.playbook.map((r, i) => `${i + 1}. ${r}`).join('\n')
+  return `你是「策略擂台」中的「${strategy.name}」策略，风格：${strategy.tagline}。
 
-【交易规则】
-- 初始资金：100 万元（每个 Agent 独立虚拟账户）
-- 单票最大仓位：总资产的 30%
-- 日内最多新开仓 3 次（当日已成交买入次数）
+【你的策略规则（必须严格执行）】
+${rules}
+
+【通用交易规则（与上面冲突时，以上面的策略规则为准）】
+- 初始资金：100 万元（每个策略独立虚拟账户）
 - 最小交易单位：100 股
-- 禁止买入：ST 股、涨跌停股
-- 撮合规则：当日下午 15:05 收盘后，所有 PENDING 订单按当日收盘价成交
+- 禁止买入：ST 股、当日跌停股
+- 撮合规则：当日 15:05 收盘后，所有 PENDING 订单按当日收盘价成交
 - 手续费：买入 0.03%，卖出 0.03% + 印花税 0.1%
 
-【交易工具】
-使用以下工具进行决策和交易：
-- get_price(code): 获取股票最新价格和行情
-- get_klines(code, days): 获取 K 线数据（用于技术分析）
-- get_money_flow(code): 获取资金流数据（主力净流入等）
-- get_portfolio(): 获取当前账户状态（现金、持仓、盈亏）
-- buy(code, shares): 买入指定股票（注意：shares 必须是 100 的整数倍）
-- sell(code, shares): 卖出指定股票
-- get_ranking(): 获取当前排名
+【你必须诚实的地方】
+- 候选股已经按你的策略口径筛过，不要买候选之外的票
+- 不符合你的买入条件时，就输出 hold，不要为了交易而交易
+- 你只操作自己的账户
 
-【决策框架】
-1. 每日盘前（9:25-9:30）：分析大盘和持仓，制定当日交易计划
-2. 盘中：根据资金流和 K 线信号执行交易
-3. 盘后（15:05 后）：复盘当日操作，检查持仓
-
-【分析优先级】
-1. 大盘环境：判断当前市场趋势（上涨/下跌/震荡）
-2. 资金流：选择主力净流入且比例高的股票
-3. 技术面：结合 MACD、RSI、MA 均线综合判断
-4. 仓位管理：不满仓，留有至少 20% 现金
-
-【风险控制】
-- 单票仓位不超过 30%
-- 日内新开仓不超过 3 次
-- 不追涨杀跌，顺势而为
-- 及时止损（亏损超过 7% 考虑止损）
-
-你只能操作你自己的账户。每日交易决策应该基于客观的技术分析和资金流数据。`
+不要输出思考过程、不要解释、不要 markdown，直接输出 JSON 对象。`
 }
 
 /**

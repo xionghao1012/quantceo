@@ -17,6 +17,9 @@ const activeTab = ref<'single' | 'portfolio' | 'optimize' | 'wf' | 'history'>('s
 const code = ref('000001')
 const strategyId = ref(1)
 const customStrategyId = ref<number | null>(null)
+// 从策略擂台带过来的规则（?rules=<base64>），直接用这套规则跑回测
+const directRules = ref<any[] | null>(null)
+const directRulesName = ref('')
 const useCustomStrategy = ref(false)
 const strategies = ref<{ id: number; name: string }[]>([])
 const startDate = ref('2025-01-01')
@@ -108,6 +111,18 @@ onMounted(async () => {
     if (res.ok) strategies.value = await res.json()
   } catch {}
 
+  if (typeof route.query.capital === 'string' && Number(route.query.capital) > 0) {
+    capital.value = Number(route.query.capital)
+  }
+  if (typeof route.query.rules === 'string' && route.query.rules) {
+    try {
+      directRules.value = JSON.parse(decodeURIComponent(escape(atob(route.query.rules))))
+      directRulesName.value = typeof route.query.name === 'string' ? route.query.name : ''
+    } catch {
+      directRules.value = null
+    }
+  }
+
   if (route.query.custom === '1' && route.query.strategyId) {
     useCustomStrategy.value = true
     customStrategyId.value = Number(route.query.strategyId)
@@ -140,7 +155,11 @@ async function run() {
       endDate: endDate.value,
       initialCapital: capital.value,
     }
-    if (useCustomStrategy.value && customStrategyId.value) {
+    if (directRules.value) {
+      // 策略擂台带过来的规则：与擂台里跑的是同一套，保证「可复现」
+      body.rules = directRules.value
+      body.strategyName = directRulesName.value || '擂台策略'
+    } else if (useCustomStrategy.value && customStrategyId.value) {
       body.custom = true
       body.userStrategyId = customStrategyId.value
     } else {
@@ -491,6 +510,10 @@ function viewStock(code: string) {
 
 <template>
   <div class="backtest-view">
+    <div v-if="directRules" class="rules-banner">
+      已载入擂台策略「{{ directRulesName || '自定义规则' }}」的规则 —— 选一只股票，点开始回测即可复现同一套买卖条件。
+      <button class="rules-clear" @click="directRules = null; directRulesName = ''">清除</button>
+    </div>
     <div class="page-header">
       <h1>策略回测<TermTip term="backtest" /></h1>
       <div class="tab-nav">
@@ -890,6 +913,8 @@ function viewStock(code: string) {
 
 <style scoped>
 .backtest-view { padding: 20px; max-width: 1200px; margin: 0 auto; }
+.rules-banner { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 14px; font-size: 13px; color: var(--brand); background: var(--brand-glow); border: 1px solid var(--brand); border-radius: var(--radius-sm); }
+.rules-clear { margin-left: auto; font-size: 12px; background: transparent; border: 1px solid var(--brand); color: var(--brand); border-radius: var(--radius-xs); padding: 2px 8px; cursor: pointer; }
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .page-header h1 { font-size: 18px; font-weight: 600; }
 

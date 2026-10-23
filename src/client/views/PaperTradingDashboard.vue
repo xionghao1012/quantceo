@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import VChart from 'vue-echarts'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import '../echarts-setup.js'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 const competitions = ref<any[]>([])
 const currentComp = ref<any | null>(null)
@@ -18,6 +20,47 @@ const agentNavHistory = ref<any[]>([])
 const detailLoading = ref(false)
 const showAgentModal = ref(false)
 const agentTab = ref<'portfolio' | 'orders' | 'nav'>('portfolio')
+
+// 策略目录（规则说明 + 能否一键回测）
+const strategies = ref<any[]>([])
+
+async function loadStrategies() {
+  try {
+    const res = await fetch('/api/paper/strategies')
+    if (res.ok) strategies.value = await res.json()
+  } catch {}
+}
+
+// 净值曲线：把 [{d, nav}] 画成 SVG polyline（不引图表库，30 个点够了）
+function navPolyline(series: any[] | undefined, w = 90, h = 26): string {
+  if (!series || series.length < 2) return ''
+  const navs = series.map((p) => Number(p.nav))
+  const min = Math.min(...navs)
+  const max = Math.max(...navs)
+  const span = max - min || 0.01
+  return navs
+    .map((v, i) => {
+      const x = (i / (navs.length - 1)) * w
+      const y = h - ((v - min) / span) * h
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+}
+
+function navTrendClass(series: any[] | undefined): string {
+  if (!series || series.length < 2) return ''
+  const first = Number(series[0].nav)
+  const last = Number(series[series.length - 1].nav)
+  return last >= first ? 'up-text' : 'down-text'
+}
+
+// 用这套规则回测：把规则打包进 query，回测页直接载入
+function backtestStrategy(st: any) {
+  if (!st?.backtestRules) return
+  const payload = btoa(unescape(encodeURIComponent(JSON.stringify(st.backtestRules))))
+  // 带上 100 万本金：擂台就是这个本金，而且小本金连高价股的一手都买不起
+  router.push({ path: '/backtest', query: { rules: payload, name: st.name, capital: '1000000' } })
+}
 
 // 回测对比
 const compareData = ref<any>(null)
@@ -219,7 +262,7 @@ function rejectReasonText(r: string) {
 }
 
 let refreshTimer: ReturnType<typeof setInterval>
-onMounted(() => { fetchCompetitions(); refreshTimer = setInterval(fetchRanking, 30000) })
+onMounted(() => { loadStrategies(); fetchCompetitions(); refreshTimer = setInterval(fetchRanking, 30000) })
 onUnmounted(() => clearInterval(refreshTimer))
 
 function navChartOption(history: any[]) {
@@ -267,13 +310,18 @@ function navChartOption(history: any[]) {
     <!-- 排名表 -->
     <div class="card ranking-card">
       <div class="card-header">
-        <h1>AI 模拟炒股大赛</h1>
+        <h1>策略擂台</h1>
+        <router-link to="/paper-trading/history" class="history-link">历史比赛 →</router-link>
         <span v-if="currentComp?.status === 'running'" class="live-dot">● 实时更新中</span>
       </div>
 
       <div v-if="loading && !ranking.length" class="loading">加载排名...</div>
       <div v-else-if="!ranking.length && currentComp" class="empty-state">
-        <p>暂无参赛 Agent，请联系管理员添加</p>
+        <p>本届擂台还没开赛</p>
+        <p class="empty-hint">
+          5 个规则公开的策略会在这里同场竞技（趋势跟随 / 均值回归 / 量价突破 / 涨停回封 / 低频轮动），
+          每个交易日 14:50 决策、15:05 按收盘价成交。规则见下方「参赛策略」。
+        </p>
       </div>
 
       <div v-else class="table-scroll">
@@ -286,6 +334,7 @@ function navChartOption(history: any[]) {
             <th class="num">现金</th>
             <th class="num">累计收益率</th>
             <th class="num">净值</th>
+            <th class="num">走势</th>
           </tr>
         </thead>
         <tbody>
@@ -305,6 +354,13 @@ function navChartOption(history: any[]) {
               {{ fmtReturn(r.totalReturn) }}
             </td>
             <td class="num">{{ (r.nav || 1).toFixed(4) }}</td>
+            <td class="num">
+              <svg v-if="r.navSeries && r.navSeries.length > 1" width="90" height="26" class="spark">
+                <polyline :points="navPolyline(r.navSeries)" fill="none"
+                  :class="navTrendClass(r.navSeries)" stroke-width="1.5" />
+              </svg>
+              <span v-else class="spark-empty">—</span>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -322,6 +378,29 @@ function navChartOption(history: any[]) {
         <button class="compare-toggle" @click="showCompare = !showCompare; showCompare && !compareData && fetchCompare()">
           {{ showCompare ? '隐藏对比' : '查看对比' }}
         </button>
+      </div>
+    </div>
+
+    <!-- 参赛策略：规则公开，能一键回测的给按钮 -->
+    <div v-if="strategies.length" class="card strategies-card">
+      <div class="card-header">
+        <h2>参赛策略</h2>
+        <span class="card-sub">规则公开、可复现；能表达成回测规则的可以直接跑</span>
+      </div>
+      <div class="strategy-grid">
+        <div v-for="st in strategies" :key="st.id" class="strategy-item">
+          <div class="strategy-head">
+            <span class="strategy-name">{{ st.name }}</span>
+            <span class="strategy-tag">{{ st.tagline }}</span>
+          </div>
+          <ul class="strategy-rules">
+            <li v-for="(rule, i) in st.playbook" :key="i">{{ rule }}</li>
+          </ul>
+          <button v-if="st.canBacktest" class="strategy-btn" @click="backtestStrategy(st)">
+            用这套规则回测 →
+          </button>
+          <span v-else class="strategy-note">依赖资金流/量能数据，暂不支持一键回测</span>
+        </div>
       </div>
     </div>
 
@@ -524,6 +603,21 @@ function navChartOption(history: any[]) {
 .return-cell { font-size: 14px; font-weight: 700; }
 .up-text { color: var(--up, #ef4444); }
 .down-text { color: var(--down, #22c55e); }
+.spark polyline.up-text { stroke: #ef4444; }
+.spark polyline.down-text { stroke: #10b981; }
+.spark-empty { color: var(--text-tertiary); font-size: 12px; }
+.history-link { margin-left: 12px; font-size: 12px; color: var(--brand); text-decoration: none; }
+.card-sub { font-size: 11px; color: var(--text-tertiary); }
+.strategy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 12px 16px 16px; }
+.strategy-item { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.strategy-head { display: flex; flex-direction: column; gap: 2px; }
+.strategy-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.strategy-tag { font-size: 11px; color: var(--text-tertiary); }
+.strategy-rules { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.strategy-rules li { font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.strategy-btn { align-self: flex-start; margin-top: auto; padding: 5px 10px; font-size: 12px; cursor: pointer; background: var(--brand-glow); color: var(--brand); border: 1px solid var(--brand); border-radius: var(--radius-xs); }
+.strategy-note { font-size: 11px; color: var(--text-tertiary); margin-top: auto; }
+.empty-hint { max-width: 52ch; margin: 6px auto 0; font-size: 12px; line-height: 1.7; color: var(--text-tertiary); }
 .comp-info { display: flex; gap: 24px; flex-wrap: wrap; }
 .info-item { display: flex; flex-direction: column; gap: 4px; }
 .info-label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; }

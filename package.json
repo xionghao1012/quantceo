@@ -24,7 +24,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "db:seed-e2e-user": "tsx src/server/db/seedE2EUser.ts",
-    "lint:prune": "eslint \"src/**/*.{ts,vue}\" --prune-suppressions"
+    "lint:prune": "eslint \"src/**/*.{ts,vue}\" --prune-suppressions",
+    "paper:start": "tsx scripts/start-competition.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

@@ -78,8 +78,8 @@ export const corePlugin: FrontendPlugin = {
     {
       title: 'AI 与设置',
       items: [
-        { label: 'AI炒股大赛', icon: '🏆', route: 'paper-trading', check: () => true },
-        { label: '历史比赛', icon: '📊', route: 'paper-trading-history', check: () => true },
+        // 两个入口合成一个：比赛页里已经有「历史比赛」的入口，平级放两个只会稀释注意力
+        { label: '策略擂台', icon: '🏆', route: 'paper-trading', check: () => true },
         { label: '个人中心', icon: '◈', route: 'profile', check: () => useAuthStore().isLoggedIn },
       ],
     },

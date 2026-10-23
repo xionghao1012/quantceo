@@ -993,9 +993,12 @@ export function startScheduler() {
     }
   })
 
-  // Paper Trading: 交易时段每 5 分钟让 AI Agent 做决策
-  cron.schedule('*/5 9,10,11,13,14 * * 1-5', async () => {
-    console.log('[Scheduler] Running paper trading AI agents...')
+  // Paper Trading: 每日 14:50 让 AI Agent 做一次决策，15:05 按收盘价撮合。
+  // 原来每 5 分钟决策一次（一天 60 次 × 5 个策略 = 300 次 LLM 调用），
+  // 但订单统一在 15:05 按收盘价成交 —— 前面 59 次思考毫无意义，
+  // 既烧钱又让业绩无法归因（不知道是哪次决策带来的收益）。
+  cron.schedule('50 14 * * 1-5', async () => {
+    console.log('[Scheduler] Running paper trading AI agents (daily decision)...')
     try {
       const { runAllAgents } = await import('./paperTradingAgent.js')
       const results = await runAllAgents()

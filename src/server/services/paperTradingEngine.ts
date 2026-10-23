@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 /**
  * Paper Trading Engine — 模拟撮合引擎
  *
@@ -15,9 +16,10 @@ import {
 } from '../db/schema.js'
 import { eq, and, gte, sql, desc } from 'drizzle-orm'
 import { getRealtimeMoneyFlow } from './moneyFlowService.js'
+import { PAPER_STRATEGIES } from './paperStrategies.js'
 
 // 获取价格：实时资金流 → 资金流表 → K 线最新收盘（最后兜底）
-async function getPrice(code: string): Promise<number | null> {
+export async function getPrice(code: string): Promise<number | null> {
   try {
     const rt = await getRealtimeMoneyFlow(code)
     if (rt && rt.close > 0) return Number(rt.close)
@@ -458,6 +460,74 @@ export async function getAccountPortfolio(accountId: number) {
     todayNewPositions: Number(todayOrders[0]?.cnt ?? 0),
     dailyLimit: compRows[0]?.dailyTradeLimit ?? 3,
     positions: positionsWithValue,
+  }
+}
+
+// -----------------------------------------------------------
+// 一键建赛（幂等）
+// -----------------------------------------------------------
+
+/**
+ * 建一场比赛并补齐 5 个策略账户。
+ * 幂等：已有进行中的比赛就复用它，只补缺的策略账户。
+ * agentId 全局唯一，所以第 2 届会自动用 trend-2 / reversion-2 …
+ */
+export async function bootstrapCompetition(opts: {
+  name?: string
+  initialCash?: string
+} = {}) {
+  const running = await db.select().from(paperCompetitions)
+    .where(eq(paperCompetitions.status, 'running'))
+    .orderBy(desc(paperCompetitions.id))
+    .limit(1)
+
+  let comp = running[0]
+  let created = false
+  if (!comp) {
+    const initialCash = opts.initialCash || '1000000'
+    ;[comp] = await db.insert(paperCompetitions).values({
+      name: opts.name || `${new Date().getFullYear()} 策略擂台`,
+      initialCash,
+      maxPositionRatio: '0.30',
+      dailyTradeLimit: 3,
+      status: 'running',
+      startedAt: new Date(),
+    }).returning()
+    created = true
+  }
+
+  const existing = await db.select().from(paperAccounts).where(eq(paperAccounts.competitionId, comp.id))
+  const taken = new Set(existing.map(a => a.agentId))
+  const added: string[] = []
+
+  for (const strategy of PAPER_STRATEGIES) {
+    if (taken.has(strategy.id)) continue
+    // 找一个没被占用的 agentId（跨比赛全局唯一）
+    let agentId = strategy.id
+    let n = 1
+    while (true) {
+      const clash = await db.select({ id: paperAccounts.id }).from(paperAccounts)
+        .where(eq(paperAccounts.agentId, agentId)).limit(1)
+      if (!clash.length) break
+      n += 1
+      agentId = `${strategy.id}-${n}`
+    }
+    await db.insert(paperAccounts).values({
+      competitionId: comp.id,
+      agentId,
+      agentName: strategy.name,
+      apiKey: crypto.randomBytes(32).toString('hex'),
+      cash: comp.initialCash,
+    })
+    added.push(agentId)
+  }
+
+  return {
+    competitionId: comp.id,
+    name: comp.name,
+    status: comp.status,
+    created,
+    accountsAdded: added,
   }
 }
 

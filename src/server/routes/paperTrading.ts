@@ -6,12 +6,14 @@ import { db } from '../db/db.js'
 import {
   paperCompetitions, paperAccounts, paperOrders, paperNavSnapshots,
 } from '../db/schema.js'
-import { eq, desc, and } from 'drizzle-orm'
+import { eq, desc, and, sql } from 'drizzle-orm'
 import {
   submitOrder, getAccountPortfolio, getCompetitionRanking,
   matchAllPendingOrders, snapshotAllAccounts,
+  bootstrapCompetition,
 } from '../services/paperTradingEngine.js'
 import { runAllAgents, runAgent } from '../services/paperTradingAgent.js'
+import { strategyCatalog } from '../services/paperStrategies.js'
 import { getOrFetchKlines } from '../data/cache.js'
 import { runBacktest } from '../backtest/index.js'
 import type { BacktestResult } from '../../shared/types.js'
@@ -37,6 +39,11 @@ router.get('/competitions', async (_req, res) => {
 })
 
 // 历史比赛列表（只显示已结束的比赛）
+// 策略目录：规则、说明、能否一键回测（前端策略卡片与回测按钮都读它）
+router.get('/strategies', (_req, res) => {
+  res.json(strategyCatalog())
+})
+
 router.get('/competitions/history/all', async (_req, res) => {
   const history = await db.select().from(paperCompetitions)
     .where(eq(paperCompetitions.status, 'finished'))
@@ -81,7 +88,28 @@ router.get('/competitions/:id', async (req, res) => {
 router.get('/competitions/:id/ranking', async (req, res) => {
   const id = parseInt(req.params.id)
   const ranking = await getCompetitionRanking(id)
-  res.json({ competitionId: id, ranking })
+
+  // 净值曲线：每个账户最近 30 个快照（没有快照就返回空数组，前端不画线）
+  const snaps = await db.execute(sql`
+    SELECT account_id, snapshot_date::text AS d, nav::float8 AS nav
+    FROM paper_nav_snapshots
+    WHERE competition_id = ${id}
+    ORDER BY snapshot_date
+  `) as any
+  const series = new Map<number, Array<{ d: string; nav: number }>>()
+  for (const row of snaps?.rows || []) {
+    const list = series.get(row.account_id) || []
+    list.push({ d: row.d, nav: Number(row.nav) })
+    series.set(row.account_id, list)
+  }
+
+  res.json({
+    competitionId: id,
+    ranking: ranking.map((r: any) => ({
+      ...r,
+      navSeries: (series.get(r.accountId) || []).slice(-30),
+    })),
+  })
 })
 
 // ----------------------------------------------------------
@@ -404,6 +432,19 @@ router.patch('/admin/competitions/:id', requireAdmin, async (req, res) => {
   const [comp] = await db.update(paperCompetitions).set(updates).where(eq(paperCompetitions.id, id)).returning()
   if (!comp) return res.status(404).json({ error: 'Competition not found' })
   res.json(comp)
+})
+
+/**
+ * 一键建赛（幂等）：没有进行中的比赛就建一场，并补齐 5 个策略账户。
+ * 命令行也能跑：npm run paper:start
+ */
+router.post('/admin/bootstrap', requireAdmin, async (_req, res) => {
+  try {
+    const result = await bootstrapCompetition()
+    res.json(result)
+  } catch (e: any) {
+    res.status(500).json({ error: e.message })
+  }
 })
 
 router.get('/admin/accounts', requireAdmin, async (req, res) => {
