@@ -551,6 +551,15 @@ async function init() {
     ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reason TEXT;
     ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS rule_hit VARCHAR(200);
 
+    CREATE TABLE IF NOT EXISTS paper_strategy_subs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) NOT NULL,
+      strategy_id VARCHAR(50) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_paper_strategy_sub_user
+      ON paper_strategy_subs(user_id, strategy_id);
+
     CREATE TABLE IF NOT EXISTS paper_weekly_reports (
       id SERIAL PRIMARY KEY,
       competition_id INTEGER REFERENCES paper_competitions(id) NOT NULL,

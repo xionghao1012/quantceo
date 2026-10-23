@@ -7,6 +7,9 @@ export class LazyIndicators {
   private _bollinger?: { upper: number[]; middle: number[]; lower: number[] }
   private _kdj?: KDJResult
   private _closes?: number[]
+  private _volRatio?: number[]
+  private _momentum?: number[]
+  private _changePct?: number[]
 
   constructor(
     private klines: KLine[],
@@ -38,6 +41,48 @@ export class LazyIndicators {
   get rsi(): number[] {
     if (!this._rsi) this._rsi = calcRSI(this.klines)
     return this._rsi
+  }
+
+  /** 量比：当日成交量 / 近 20 日均量（含当日，与 daily_metrics 口径一致） */
+  get volRatio(): number[] {
+    if (!this._volRatio) {
+      const vols = this.klines.map(k => k.volume)
+      const out: number[] = []
+      for (let i = 0; i < vols.length; i++) {
+        const from = Math.max(0, i - 19)
+        const slice = vols.slice(from, i + 1)
+        const avg = slice.reduce((a, b) => a + b, 0) / slice.length
+        out.push(avg > 0 ? vols[i] / avg : 1)
+      }
+      this._volRatio = out
+    }
+    return this._volRatio
+  }
+
+  /** 10 日动量（%），与 daily_metrics.momentum 口径一致 */
+  get momentum(): number[] {
+    if (!this._momentum) {
+      const closes = this.closes
+      this._momentum = closes.map((c, i) => {
+        if (i < 10) return NaN
+        const base = closes[i - 10]
+        return base > 0 ? ((c - base) / base) * 100 : NaN
+      })
+    }
+    return this._momentum
+  }
+
+  /** 当日涨跌幅（%） */
+  get changePct(): number[] {
+    if (!this._changePct) {
+      const closes = this.closes
+      this._changePct = closes.map((c, i) => {
+        if (i < 1) return NaN
+        const prev = closes[i - 1]
+        return prev > 0 ? ((c - prev) / prev) * 100 : NaN
+      })
+    }
+    return this._changePct
   }
 
   get bollinger() {

@@ -35,6 +35,7 @@ export function getIndicatorValues(
   macd: MACDResult,
   rsi: number[],
   closes: number[],
+  extra?: { volRatio?: number[]; momentum?: number[]; changePct?: number[] },
 ): Record<string, number> {
   return {
     ma5: mas['MA5']?.[i] ?? NaN,
@@ -46,6 +47,9 @@ export function getIndicatorValues(
     macdHistogram: macd.histogram[i] ?? NaN,
     rsi: rsi[i] ?? NaN,
     close: closes[i] ?? NaN,
+    volRatio: extra?.volRatio?.[i] ?? NaN,
+    momentum: extra?.momentum?.[i] ?? NaN,
+    changePct: extra?.changePct?.[i] ?? NaN,
   }
 }
 

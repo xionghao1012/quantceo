@@ -5,15 +5,17 @@ import { Router } from 'express'
 import { db } from '../db/db.js'
 import {
   paperCompetitions, paperAccounts, paperOrders, paperNavSnapshots,
+  paperStrategySubs, watchlist,
 } from '../db/schema.js'
 import { eq, desc, and, sql } from 'drizzle-orm'
+import { requireAuth } from '../middleware/auth.js'
 import {
   submitOrder, getAccountPortfolio, getCompetitionRanking,
   matchAllPendingOrders, snapshotAllAccounts,
   bootstrapCompetition,
 } from '../services/paperTradingEngine.js'
 import { runAllAgents, runAgent } from '../services/paperTradingAgent.js'
-import { strategyCatalog } from '../services/paperStrategies.js'
+import { strategyCatalog, getPaperStrategy, PAPER_STRATEGIES } from '../services/paperStrategies.js'
 import { generateWeeklyReport, listWeeklyReports } from '../services/paperWeeklyReport.js'
 import { getOrFetchKlines } from '../data/cache.js'
 import { runBacktest } from '../backtest/index.js'
@@ -126,6 +128,54 @@ router.post('/admin/reports/generate', requireAdmin, async (req, res) => {
   const report = await generateWeeklyReport({ competitionId: req.body?.competitionId, weekEnd: req.body?.weekEnd })
   if (!report) return res.status(404).json({ error: '没有进行中的比赛' })
   res.json(report)
+})
+
+// ----------------------------------------------------------
+// 策略信号订阅（Pro 钩子）：选一个策略 + 我的自选股 → 每天告诉你哪只符合条件
+// ----------------------------------------------------------
+
+router.get('/strategy-subs', requireAuth, async (req: any, res) => {
+  const rows = await db.select().from(paperStrategySubs).where(eq(paperStrategySubs.userId, req.user.userId))
+  res.json(rows.map(r => r.strategyId))
+})
+
+router.post('/strategy-subs', requireAuth, async (req: any, res) => {
+  const { strategyId } = req.body || {}
+  if (!PAPER_STRATEGIES.some(s => s.id === strategyId)) return res.status(400).json({ error: '未知策略' })
+  await db.insert(paperStrategySubs).values({ userId: req.user.userId, strategyId })
+    .onConflictDoNothing()
+  res.json({ ok: true, strategyId })
+})
+
+router.delete('/strategy-subs/:strategyId', requireAuth, async (req: any, res) => {
+  await db.delete(paperStrategySubs)
+    .where(and(eq(paperStrategySubs.userId, req.user.userId), eq(paperStrategySubs.strategyId, req.params.strategyId)))
+  res.json({ ok: true })
+})
+
+/**
+ * 今日策略信号：我订阅的策略 × 我的自选股 → 哪些今天符合买入条件。
+ * 这是从「看擂台」到「用在自己股票上」的钩子。
+ */
+router.get('/strategy-signals', requireAuth, async (req: any, res) => {
+  const subs = await db.select().from(paperStrategySubs).where(eq(paperStrategySubs.userId, req.user.userId))
+  if (!subs.length) return res.json({ strategies: [], watchlistCount: 0 })
+
+  const wl = await db.select({ code: watchlist.code }).from(watchlist).where(eq(watchlist.userId, req.user.userId))
+  const codes = [...new Set(wl.map(w => w.code))]
+  if (!codes.length) return res.json({ strategies: [], watchlistCount: 0 })
+
+  const strategies = []
+  for (const sub of subs) {
+    const st = getPaperStrategy(sub.strategyId)
+    try {
+      const matches = await st.candidates(codes)
+      strategies.push({ strategyId: st.id, strategyName: st.name, matches })
+    } catch (e: any) {
+      strategies.push({ strategyId: st.id, strategyName: st.name, matches: [], error: e.message })
+    }
+  }
+  res.json({ strategies, watchlistCount: codes.length })
 })
 
 // ----------------------------------------------------------

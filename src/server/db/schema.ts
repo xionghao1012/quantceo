@@ -651,6 +651,15 @@ export const paperOrders = pgTable('paper_orders', {
   statusIdx: index('idx_paper_order_status').on(table.status),
 }))
 
+export const paperStrategySubs = pgTable('paper_strategy_subs', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  strategyId: varchar('strategy_id', { length: 50 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userStrategyIdx: unique('idx_paper_strategy_sub_user').on(table.userId, table.strategyId),
+}))
+
 export const paperWeeklyReports = pgTable('paper_weekly_reports', {
   id: serial('id').primaryKey(),
   competitionId: integer('competition_id').references(() => paperCompetitions.id).notNull(),

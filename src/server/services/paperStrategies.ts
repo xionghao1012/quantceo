@@ -35,7 +35,10 @@ export interface PaperStrategy {
   playbook: string[]
   /** 回测引擎能表达的规则（不能表达就是 null，页面不显示回测按钮） */
   backtestRules: Rule[] | null
-  candidates: () => Promise<PaperCandidate[]>
+  /** 回测口径与实盘不一致时的说明 */
+  backtestNote?: string
+  /** codes 传了就只在这些代码里筛（用于策略信号订阅） */
+  candidates: (codes?: string[]) => Promise<PaperCandidate[]>
 }
 
 /** 最新日指标的日期（收盘后由 18:40 的任务更新；盘中用上一交易日） */
@@ -45,9 +48,14 @@ async function latestMetricDate(): Promise<string | null> {
 }
 
 /** 从 daily_metrics 选候选，close 取该股最新 K 线 */
-async function fromMetrics(where: string, orderBy: string, limit: number, reasonOf: (row: any) => string): Promise<PaperCandidate[]> {
+async function fromMetrics(where: string, orderBy: string, limit: number, reasonOf: (row: any) => string, codes?: string[]): Promise<PaperCandidate[]> {
   const d = await latestMetricDate()
   if (!d) return []
+  // 只允许合法 6 位代码进 SQL（自选股来自用户输入）
+  const safeCodes = (codes || []).filter(c => /^\d{6}$/.test(c))
+  const codeFilter = safeCodes.length
+    ? sql` AND m.code IN (${sql.join(safeCodes.map(c => sql`${c}`), sql`, `)})`
+    : sql``
   const r = await db.execute(sql`
     SELECT m.code, m.name, m.change_pct::float8 AS change_pct,
            m.rsi::float8 AS rsi, m.vol_ratio::float8 AS vol_ratio,
@@ -71,6 +79,7 @@ async function fromMetrics(where: string, orderBy: string, limit: number, reason
       -- 停牌/退市：最近 5 天没有 K 线的直接排除，别让模型去研究一只买不了的票
       AND k.date >= (SELECT max(date) FROM klines) - INTERVAL '5 days'
       AND ${sql.raw(where)}
+      ${codeFilter}
     ORDER BY ${sql.raw(orderBy)}
     LIMIT ${limit}
   `) as any
@@ -104,11 +113,12 @@ export const PAPER_STRATEGIES: PaperStrategy[] = [
       { type: 'cross', action: 'BUY', conditions: [{ indicator: 'ma5', operator: 'cross_above', value: 'ma20' }] },
       { type: 'cross', action: 'SELL', conditions: [{ indicator: 'ma5', operator: 'cross_below', value: 'ma20' }] },
     ] as Rule[],
-    candidates: () => fromMetrics(
+    candidates: (codes?: string[]) => fromMetrics(
       "m.macd_signal > 0 AND m.momentum > 0",
       'm.momentum DESC NULLS LAST',
       8,
       (r) => `动量 ${Number(r.momentum).toFixed(1)}，MACD 柱为正`,
+      codes,
     ),
   },
   {
@@ -125,11 +135,12 @@ export const PAPER_STRATEGIES: PaperStrategy[] = [
       { type: 'threshold', action: 'BUY', conditions: [{ indicator: 'rsi', operator: '<', value: 30 }] },
       { type: 'threshold', action: 'SELL', conditions: [{ indicator: 'rsi', operator: '>', value: 55 }] },
     ] as Rule[],
-    candidates: () => fromMetrics(
+    candidates: (codes?: string[]) => fromMetrics(
       'm.rsi < 40',
       'm.rsi ASC NULLS LAST',
       8,
       (r) => `RSI ${Number(r.rsi).toFixed(0)}（超跌）`,
+      codes,
     ),
   },
   {
@@ -142,13 +153,19 @@ export const PAPER_STRATEGIES: PaperStrategy[] = [
       '卖出：持仓量比跌破 1 或当日跌幅超过 5%，卖出',
       '仓位：单票不超过 20%，最多同时持有 3 只',
     ],
-    // 回测引擎没有成交量指标，规则无法一比一表达 → 不提供一键回测
-    backtestRules: null,
-    candidates: () => fromMetrics(
+    backtestRules: [
+      { type: 'threshold', action: 'BUY', conditions: [
+        { indicator: 'volRatio', operator: '>', value: 1.5 },
+        { indicator: 'changePct', operator: '>', value: 2 },
+      ] },
+      { type: 'threshold', action: 'SELL', conditions: [{ indicator: 'volRatio', operator: '<', value: 1 }] },
+    ] as Rule[],
+    candidates: (codes?: string[]) => fromMetrics(
       'm.vol_ratio > 1.5 AND m.change_pct BETWEEN 2 AND 9',
       'm.vol_ratio DESC NULLS LAST',
       8,
       (r) => `量比 ${Number(r.vol_ratio).toFixed(1)}，涨 ${Number(r.change_pct).toFixed(1)}%`,
+      codes,
     ),
   },
   {
@@ -162,7 +179,8 @@ export const PAPER_STRATEGIES: PaperStrategy[] = [
       '仓位：单票不超过 15%，最多同时持有 2 只 —— 这个策略是用来做对照的，亏了也正常',
     ],
     backtestRules: null,
-    candidates: async () => {
+    candidates: async (codes?: string[]) => {
+      const safeCodes = (codes || []).filter(c => /^\d{6}$/.test(c))
       // 取「最近一个已收盘交易日」的涨停（不是今天）：今天的涨停买不进，
       // 规则也明确要求「今日未涨停」。changePct 留 0，避免模型误读成今天的涨幅。
       const r = await db.execute(sql`
@@ -175,6 +193,7 @@ export const PAPER_STRATEGIES: PaperStrategy[] = [
           AND l.name NOT LIKE '%ST%'
           AND l.name NOT LIKE '%退%'
           AND k.date >= (SELECT max(date) FROM klines) - INTERVAL '5 days'
+          ${safeCodes.length ? sql`AND l.code IN (${sql.join(safeCodes.map(c => sql`${c}`), sql`, `)})` : sql``}
         ORDER BY l.code
         LIMIT 8
       `) as any
@@ -197,12 +216,19 @@ export const PAPER_STRATEGIES: PaperStrategy[] = [
       '卖出：非调仓日只做止损（单票亏损超过 10%），不做主动换仓',
       '仓位：单票不超过 20%，始终留 20% 现金',
     ],
-    backtestRules: null,
-    candidates: () => fromMetrics(
+    // 原策略是组合轮动（每月在动量前 10 里等权），单票回测表达不了组合，
+    // 这里用「动量阈值」做单票近似，页面上会标注口径不同。
+    backtestRules: [
+      { type: 'threshold', action: 'BUY', conditions: [{ indicator: 'momentum', operator: '>', value: 5 }] },
+      { type: 'threshold', action: 'SELL', conditions: [{ indicator: 'momentum', operator: '<', value: 0 }] },
+    ] as Rule[],
+    backtestNote: '单票口径：原策略是每月组合轮动，这里用动量阈值近似',
+    candidates: (codes?: string[]) => fromMetrics(
       'm.momentum > 0 AND m.momentum < 50',
       'm.momentum DESC NULLS LAST',
       10,
       (r) => `动量 ${Number(r.momentum).toFixed(1)}`,
+      codes,
     ),
   },
 ]
@@ -222,6 +248,7 @@ export function strategyCatalog() {
     tagline: s.tagline,
     playbook: s.playbook,
     backtestRules: s.backtestRules,
+    backtestNote: s.backtestNote,
     canBacktest: !!s.backtestRules,
   }))
 }

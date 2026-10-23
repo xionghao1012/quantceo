@@ -21,6 +21,39 @@ const detailLoading = ref(false)
 const showAgentModal = ref(false)
 const agentTab = ref<'portfolio' | 'orders' | 'nav'>('portfolio')
 
+// 策略信号订阅（Pro 钩子）：我的自选股 × 我订阅的策略
+const subs = ref<string[]>([])
+const signals = ref<{ strategies: any[]; watchlistCount: number } | null>(null)
+const subBusy = ref('')
+
+async function loadSubs() {
+  if (!auth.isLoggedIn) return
+  try {
+    const [sRes, gRes] = await Promise.all([
+      fetch('/api/paper/strategy-subs', { headers: auth.authHeaders() }),
+      fetch('/api/paper/strategy-signals', { headers: auth.authHeaders() }),
+    ])
+    if (sRes.ok) subs.value = await sRes.json()
+    if (gRes.ok) signals.value = await gRes.json()
+  } catch {}
+}
+
+async function toggleSub(strategyId: string) {
+  if (!auth.isLoggedIn) { router.push({ path: '/login', query: { redirect: '/paper-trading' } }); return }
+  subBusy.value = strategyId
+  try {
+    const on = subs.value.includes(strategyId)
+    await fetch(on ? `/api/paper/strategy-subs/${strategyId}` : '/api/paper/strategy-subs', {
+      method: on ? 'DELETE' : 'POST',
+      headers: { 'Content-Type': 'application/json', ...auth.authHeaders() },
+      body: on ? undefined : JSON.stringify({ strategyId }),
+    })
+    await loadSubs()
+  } finally {
+    subBusy.value = ''
+  }
+}
+
 // 周报（markdown，可直接复制发公众号）
 const reports = ref<any[]>([])
 const copied = ref(false)
@@ -286,7 +319,7 @@ function rejectReasonText(r: string) {
 }
 
 let refreshTimer: ReturnType<typeof setInterval>
-onMounted(() => { loadStrategies(); fetchCompetitions(); refreshTimer = setInterval(fetchRanking, 30000) })
+onMounted(() => { loadStrategies(); loadSubs(); fetchCompetitions(); refreshTimer = setInterval(fetchRanking, 30000) })
 onUnmounted(() => clearInterval(refreshTimer))
 
 function navChartOption(history: any[]) {
@@ -416,6 +449,32 @@ function navChartOption(history: any[]) {
       </div>
     </div>
 
+    <!-- 我的策略信号：订阅的策略 × 我的自选股 -->
+    <div v-if="auth.isLoggedIn && subs.length" class="card signals-card">
+      <div class="card-header">
+        <h2>我的策略信号</h2>
+        <span class="card-sub">
+          我订阅的策略 × 我的自选股（{{ signals?.watchlistCount || 0 }} 只）
+        </span>
+      </div>
+      <div v-if="!signals?.watchlistCount" class="report-empty">
+        自选股是空的 —— 先去行情看板把想盯的股票加进自选，这里每天会告诉你哪只符合你订阅的策略。
+      </div>
+      <div v-else class="signals-body">
+        <div v-for="st in signals.strategies" :key="st.strategyId" class="signal-group">
+          <div class="signal-head">{{ st.strategyName }}</div>
+          <div v-if="!st.matches.length" class="signal-none">今天你的自选股里没有符合条件的</div>
+          <div v-else class="signal-list">
+            <div v-for="m in st.matches" :key="m.code" class="signal-item">
+              <router-link :to="`/stock/${m.code}`" class="signal-name">{{ m.name }}({{ m.code }})</router-link>
+              <span class="signal-price">{{ m.close }}</span>
+              <span class="signal-reason">{{ m.reason }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 周报：每周五自动生成，可直接复制发公众号 -->
     <div v-if="currentComp" class="card report-card">
       <div class="card-header">
@@ -458,10 +517,17 @@ function navChartOption(history: any[]) {
           <ul class="strategy-rules">
             <li v-for="(rule, i) in st.playbook" :key="i">{{ rule }}</li>
           </ul>
-          <button v-if="st.canBacktest" class="strategy-btn" @click="backtestStrategy(st)">
-            用这套规则回测 →
-          </button>
-          <span v-else class="strategy-note">依赖资金流/量能数据，暂不支持一键回测</span>
+          <div class="strategy-actions">
+            <button v-if="st.canBacktest" class="strategy-btn" @click="backtestStrategy(st)">
+              用这套规则回测 →
+            </button>
+            <span v-else class="strategy-note">依赖涨停数据与持有天数，暂不支持一键回测</span>
+            <button class="strategy-sub" :class="{ on: subs.includes(st.id) }" :disabled="subBusy === st.id"
+              @click="toggleSub(st.id)">
+              {{ subs.includes(st.id) ? '已订阅信号 ✓' : '订阅我的自选股信号' }}
+            </button>
+          </div>
+          <span v-if="st.backtestNote" class="strategy-caveat">{{ st.backtestNote }}</span>
         </div>
       </div>
     </div>
@@ -670,6 +736,19 @@ function navChartOption(history: any[]) {
 .return-cell { font-size: 14px; font-weight: 700; }
 .up-text { color: var(--up, #ef4444); }
 .down-text { color: var(--down, #22c55e); }
+.strategy-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.strategy-sub { padding: 5px 10px; font-size: 12px; cursor: pointer; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: var(--radius-xs); }
+.strategy-sub.on { color: var(--brand); border-color: var(--brand); background: var(--brand-glow); }
+.strategy-caveat { font-size: 11px; color: #f59e0b; }
+.signals-body { padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.signal-group { display: flex; flex-direction: column; gap: 6px; }
+.signal-head { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.signal-none { font-size: 12px; color: var(--text-tertiary); }
+.signal-list { display: flex; flex-direction: column; gap: 4px; }
+.signal-item { display: flex; align-items: baseline; gap: 10px; font-size: 12px; }
+.signal-name { color: var(--brand); text-decoration: none; min-width: 140px; }
+.signal-price { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.signal-reason { color: var(--text-tertiary); }
 .report-empty { padding: 16px; font-size: 12px; line-height: 1.8; color: var(--text-tertiary); }
 .report-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; }
 .report-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
