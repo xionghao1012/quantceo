@@ -231,6 +231,12 @@ async function aiDailyPicksForDate(pickDate: string): Promise<number> {
 
 async function aiPredictionsForDate(predictDate: string): Promise<number> {
   await pro._ensure()
+  // 没有预测日当天的 K 线就别预测：否则基准价是几天前的，
+  // 评估时会把多天涨跌算成 1 天（生产 118 条历史全是这么被污染的）
+  if (!(await marketDataReady(predictDate))) {
+    console.log(`[Scheduler] AI 预测 ${predictDate}：行情还没入库，跳过`)
+    return 0
+  }
   const targetDateStr = nextTradingDay(predictDate)
 
   const picks = pro.selectDailyPicks ? await pro.selectDailyPicks(30) : []
@@ -242,8 +248,13 @@ async function aiPredictionsForDate(predictDate: string): Promise<number> {
   }
   picks.forEach((p: any) => allHoldings.add(p.code))
 
-  const { loadKlines, predictOne, savePrediction } = await import('../ai/predict.js')
+  // ai/predict.js 属于 Pro 边界：OSS 版里是 stub，没有这些导出。
+  // 这里只在「有候选股」时才会执行（OSS 下永远进不来），用 any 绕开 stub 的类型面。
+  const predictMod: any = await import('../ai/predict.js')
+  const { loadKlines, predictOne, savePrediction, marketBreadthText } = predictMod
   const { getMoneyFlow5d } = await import('./moneyFlowService.js')
+  // 市场环境只查一次，整批共用
+  const marketContext = await marketBreadthText(predictDate)
   let ok = 0
   let failed = 0
   let firstError = ''
@@ -253,8 +264,8 @@ async function aiPredictionsForDate(predictDate: string): Promise<number> {
       if (klines.length < 30) continue
       const last = klines[klines.length - 1]
       const mf5d = await getMoneyFlow5d(code)
-      const result = await predictOne({ code, name: picks.find((p: any) => p.code === code)?.name || code, klines, daysAhead: 1, mainNetInflow5d: mf5d?.netInflowMain })
-      await savePrediction(code, '', predictDate, targetDateStr, last.close, result)
+      const result = await predictOne({ code, name: picks.find((p: any) => p.code === code)?.name || code, klines, daysAhead: 1, mainNetInflow5d: mf5d?.netInflowMain, marketContext })
+      await savePrediction(code, '', predictDate, targetDateStr, last.close, result, klines[klines.length - 1].date)
       ok++
       await new Promise(r => setTimeout(r, 200))
     } catch (e: any) {

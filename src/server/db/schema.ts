@@ -204,6 +204,8 @@ export const aiPredictions = pgTable('ai_predictions', {
   stockName: varchar('stock_name', { length: 100 }),
   predictDate: date('predict_date').notNull(),
   targetDate: date('target_date').notNull(),
+  /** 预测所用价格的基准日（K 线日期） */
+  basisDate: date('basis_date'),
   direction: varchar('direction', { length: 10 }).notNull(),
   confidence: real('confidence').notNull(),
   currentPrice: numeric('current_price', { precision: 12, scale: 2 }),

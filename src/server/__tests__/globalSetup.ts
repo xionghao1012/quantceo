@@ -33,6 +33,8 @@ async function ensureSchema() {
   })
   const extraCols = [
     ['money_flow_realtime', 'created_at', 'TIMESTAMP DEFAULT NOW()'],
+    // 预测价格基准日：用于判断「1 日预测」实际跨了几个交易日
+    ['ai_predictions', 'basis_date', 'DATE'],
   ]
   const client = await pool.connect()
   try {

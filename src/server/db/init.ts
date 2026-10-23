@@ -67,6 +67,10 @@ async function init() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_backtest_runs_unique ON strategy_backtest_runs(strategy_key, start_date, end_date, top_n);
 
     CREATE INDEX IF NOT EXISTS idx_klines_code_date ON klines(code, date);
+    -- (code, date) 必须唯一：之前只有普通索引，而写入用 onConflictDoNothing，
+    -- 等于没有约束可冲突 —— 生产攒了 23.8 万组重复行，均线/MACD 全被双份 K 线算错。
+    -- 注意：已有重复数据的库要先跑 scripts/dedupe-klines.sql 再执行本文件。
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_klines_code_date ON klines(code, date);
 
     CREATE TABLE IF NOT EXISTS minute_klines (
       id SERIAL PRIMARY KEY,
@@ -174,6 +178,10 @@ async function init() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(refresh_token);
 
+    -- 预测用的价格基准日（K 线日期）。没有它就无法判断「1 日预测」到底跨了几天：
+    -- 生产 118 条历史评估里 117 条的基准价比预测日早 1-13 天，
+    -- 把 2-14 天的涨跌当成 1 天，方向正确率被彻底带偏。
+    ALTER TABLE ai_predictions ADD COLUMN IF NOT EXISTS basis_date DATE;
     CREATE TABLE IF NOT EXISTS ai_predictions (
       id SERIAL PRIMARY KEY,
       stock_code VARCHAR(10) NOT NULL,
