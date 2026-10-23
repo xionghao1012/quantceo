@@ -570,6 +570,17 @@ export function startScheduler() {
     await getSchedulerLogRepository().upsertEnd('signal_scan', scanDate, signalsWritten)
   })
 
+  // 策略擂台周报：每周五收盘后生成，可直接复制发公众号/小红书
+  cron.schedule('20 18 * * 5', async () => {
+    try {
+      const { generateWeeklyReport } = await import('./paperWeeklyReport.js')
+      const r = await generateWeeklyReport()
+      console.log(r ? `[Scheduler] 擂台周报已生成（${r.weekStart} ~ ${r.weekEnd}）` : '[Scheduler] 擂台周报：没有进行中的比赛')
+    } catch (e: any) {
+      console.error('[Scheduler] 擂台周报生成失败:', e.message)
+    }
+  })
+
   cron.schedule('0 18 * * 5', async () => {
     console.log('[Scheduler] Starting weekly report...')
     const scanDate = new Date().toISOString().slice(0, 10)

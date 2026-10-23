@@ -209,6 +209,10 @@ export async function submitOrder(
   name: string,
   shares: number,
   orderPrice: number,
+  /** 模型给的决策理由 */
+  reason?: string,
+  /** 触发的规则证据（候选股为什么入选） */
+  ruleHit?: string,
 ): Promise<OrderResult> {
   const validation = await validateOrder(accountId, direction, code, shares, orderPrice)
 
@@ -227,12 +231,16 @@ export async function submitOrder(
       shares,
       status: 'REJECTED',
       rejectReason: validation.reason,
+      reason: reason || null,
+      ruleHit: ruleHit || null,
     }).returning()
     return { ok: false, error: validation.reason!, message: validation.message!, order }
   }
 
   // PENDING 订单，等待下一个交易日成交
   const [order] = await db.insert(paperOrders).values({
+    reason: reason || null,
+    ruleHit: ruleHit || null,
     accountId,
     competitionId,
     code,
@@ -542,8 +550,31 @@ export async function getCompetitionRanking(competitionId: number) {
   const accounts = await db.select().from(paperAccounts)
     .where(eq(paperAccounts.competitionId, competitionId))
 
+  const comp = (await db.select().from(paperCompetitions)
+    .where(eq(paperCompetitions.id, competitionId)).limit(1))[0]
+  const initialCash = Number(comp?.initialCash ?? 1000000)
+
   const ranked = await Promise.all(accounts.map(async (account) => {
     const portfolio = await getAccountPortfolio(account.id)
+
+    // 过程指标：样本不足时收益排名是噪声，换手/回撤/交易天数才是能看的
+    const snaps = await db.select({ nav: paperNavSnapshots.nav, d: paperNavSnapshots.snapshotDate })
+      .from(paperNavSnapshots)
+      .where(eq(paperNavSnapshots.accountId, account.id))
+      .orderBy(paperNavSnapshots.snapshotDate)
+    const navs = snaps.map(x => Number(x.nav))
+    let peak = -Infinity
+    let maxDrawdown = 0
+    for (const v of navs) {
+      if (v > peak) peak = v
+      if (peak > 0) maxDrawdown = Math.max(maxDrawdown, (peak - v) / peak * 100)
+    }
+
+    const fills = await db.select({ shares: paperOrders.shares, price: paperOrders.filledPrice })
+      .from(paperOrders)
+      .where(and(eq(paperOrders.accountId, account.id), eq(paperOrders.status, 'FILLED')))
+    const turnover = fills.reduce((sum, f) => sum + Number(f.shares) * Number(f.price || 0), 0) / initialCash * 100
+
     return {
       agentId: account.agentId,
       agentName: account.agentName,
@@ -553,6 +584,14 @@ export async function getCompetitionRanking(competitionId: number) {
       totalValue: portfolio?.totalValue ?? 0,
       positionValue: portfolio?.positionValue ?? 0,
       cash: portfolio?.cash ?? 0,
+      /** 有净值快照的交易日数（样本量） */
+      tradingDays: navs.length,
+      /** 历史最大回撤 % */
+      maxDrawdown,
+      /** 换手率 %（成交额 / 初始资金） */
+      turnover,
+      /** 成交笔数 */
+      tradeCount: fills.length,
       rank: 0,
     }
   }))

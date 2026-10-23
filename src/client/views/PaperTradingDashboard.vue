@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import VChart from 'vue-echarts'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -21,6 +21,25 @@ const detailLoading = ref(false)
 const showAgentModal = ref(false)
 const agentTab = ref<'portfolio' | 'orders' | 'nav'>('portfolio')
 
+// 周报（markdown，可直接复制发公众号）
+const reports = ref<any[]>([])
+const copied = ref(false)
+
+async function loadReports(compId: number) {
+  try {
+    const res = await fetch(`/api/paper/competitions/${compId}/reports?limit=4`)
+    if (res.ok) reports.value = await res.json()
+  } catch {}
+}
+
+async function copyReport(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {}
+}
+
 // 策略目录（规则说明 + 能否一键回测）
 const strategies = ref<any[]>([])
 
@@ -30,6 +49,10 @@ async function loadStrategies() {
     if (res.ok) strategies.value = await res.json()
   } catch {}
 }
+
+// 样本量：所有策略里有净值快照的最大交易日数
+const sampleDays = computed(() => Math.max(0, ...ranking.value.map((r: any) => r.tradingDays || 0)))
+const sampleEnough = computed(() => sampleDays.value >= 20)
 
 // 净值曲线：把 [{d, nav}] 画成 SVG polyline（不引图表库，30 个点够了）
 function navPolyline(series: any[] | undefined, w = 90, h = 26): string {
@@ -165,6 +188,7 @@ async function fetchCompetitions() {
     if (res.ok) {
       competitions.value = await res.json()
       currentComp.value = competitions.value.find((c: any) => c.status === 'running') || competitions.value[0]
+    if (currentComp.value?.id) loadReports(currentComp.value.id)
       if (currentComp.value) fetchRanking()
     }
   } catch (e: any) { error.value = e.message }
@@ -325,6 +349,10 @@ function navChartOption(history: any[]) {
       </div>
 
       <div v-else class="table-scroll">
+      <p v-if="!sampleEnough" class="sample-notice">
+        样本 {{ sampleDays }} 个交易日 —— <b>样本不足，暂不排名</b>。少于 20 个交易日时收益差异是噪声，
+        先看规则执行和回撤。
+      </p>
       <table class="ranking-table">
         <thead>
           <tr>
@@ -334,17 +362,22 @@ function navChartOption(history: any[]) {
             <th class="num">现金</th>
             <th class="num">累计收益率</th>
             <th class="num">净值</th>
+            <th class="num">最大回撤</th>
+            <th class="num">换手</th>
             <th class="num">走势</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(r, i) in ranking" :key="r.agentId" class="rank-row" :class="{ top3: i < 3 }"
+          <tr v-for="(r, i) in ranking" :key="r.agentId" class="rank-row" :class="{ top3: i < 3 && sampleEnough }"
             @click="openAgentDetail(r)">
             <td class="rank-cell">
-              <span v-if="i === 0">🥇</span>
-              <span v-else-if="i === 1">🥈</span>
-              <span v-else-if="i === 2">🥉</span>
-              <span v-else class="rank-num">{{ i + 1 }}</span>
+              <template v-if="sampleEnough">
+                <span v-if="i === 0">🥇</span>
+                <span v-else-if="i === 1">🥈</span>
+                <span v-else-if="i === 2">🥉</span>
+                <span v-else class="rank-num">{{ i + 1 }}</span>
+              </template>
+              <span v-else class="rank-num">·</span>
             </td>
             <td><span class="agent-name">{{ r.agentName }}</span></td>
             <td class="num">{{ fmtMoney(r.totalValue) }}</td>
@@ -354,6 +387,8 @@ function navChartOption(history: any[]) {
               {{ fmtReturn(r.totalReturn) }}
             </td>
             <td class="num">{{ (r.nav || 1).toFixed(4) }}</td>
+            <td class="num">{{ (r.maxDrawdown ?? 0).toFixed(1) }}%</td>
+            <td class="num">{{ Math.round(r.turnover ?? 0) }}%</td>
             <td class="num">
               <svg v-if="r.navSeries && r.navSeries.length > 1" width="90" height="26" class="spark">
                 <polyline :points="navPolyline(r.navSeries)" fill="none"
@@ -379,6 +414,33 @@ function navChartOption(history: any[]) {
           {{ showCompare ? '隐藏对比' : '查看对比' }}
         </button>
       </div>
+    </div>
+
+    <!-- 周报：每周五自动生成，可直接复制发公众号 -->
+    <div v-if="currentComp" class="card report-card">
+      <div class="card-header">
+        <h2>擂台周报</h2>
+        <span class="card-sub">每周五 18:20 自动生成，可直接复制发布</span>
+      </div>
+      <div v-if="!reports.length" class="report-empty">
+        第一期周报会在本周五收盘后生成。内容包含：本周排名（样本不足时只列过程指标）、关键调仓及理由、最大回撤。
+      </div>
+      <template v-else>
+        <div class="report-head">
+          <span class="report-title">{{ reports[0].weekStart }} ~ {{ reports[0].weekEnd }}</span>
+          <button class="report-copy" @click="copyReport(reports[0].content)">
+            {{ copied ? '已复制 ✓' : '复制 markdown' }}
+          </button>
+        </div>
+        <pre class="report-body">{{ reports[0].content }}</pre>
+        <details v-if="reports.length > 1" class="report-more">
+          <summary>往期（{{ reports.length - 1 }}）</summary>
+          <div v-for="r in reports.slice(1)" :key="r.id" class="report-past">
+            <span>{{ r.weekStart }} ~ {{ r.weekEnd }}</span>
+            <button class="report-copy" @click="copyReport(r.content)">复制</button>
+          </div>
+        </details>
+      </template>
     </div>
 
     <!-- 参赛策略：规则公开，能一键回测的给按钮 -->
@@ -530,7 +592,7 @@ function navChartOption(history: any[]) {
             <div v-if="!agentOrders.length" class="empty-tab">暂无订单记录</div>
             <div v-else class="table-scroll">
             <table class="detail-table">
-              <thead><tr><th>时间</th><th>方向</th><th>股票</th><th class="num">价格</th><th class="num">数量</th><th>状态</th></tr></thead>
+              <thead><tr><th>时间</th><th>方向</th><th>股票</th><th class="num">价格</th><th class="num">数量</th><th>理由</th><th>状态</th></tr></thead>
               <tbody>
                 <tr v-for="o in agentOrders" :key="o.id">
                   <td class="time-cell">{{ fmtDateTime(o.createdAt) }}</td>
@@ -542,6 +604,11 @@ function navChartOption(history: any[]) {
                   <td><span class="stock-name">{{ o.name || o.code }}</span><span class="stock-code">{{ o.code }}</span></td>
                   <td class="num">{{ Number(o.price).toFixed(2) }}</td>
                   <td class="num">{{ o.shares }}</td>
+                  <td class="reason-cell">
+                    <span v-if="o.reason" class="order-reason">{{ o.reason }}</span>
+                    <span v-if="o.ruleHit" class="order-rule">（{{ o.ruleHit }}）</span>
+                    <span v-if="!o.reason && !o.ruleHit" class="muted">—</span>
+                  </td>
                   <td>
                     <span :class="['status-badge', orderStatusClass(o.status)]">
                       {{ orderStatusTag(o.status) }}
@@ -603,6 +670,18 @@ function navChartOption(history: any[]) {
 .return-cell { font-size: 14px; font-weight: 700; }
 .up-text { color: var(--up, #ef4444); }
 .down-text { color: var(--down, #22c55e); }
+.report-empty { padding: 16px; font-size: 12px; line-height: 1.8; color: var(--text-tertiary); }
+.report-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; }
+.report-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.report-copy { font-size: 12px; padding: 4px 10px; cursor: pointer; background: var(--brand-glow); color: var(--brand); border: 1px solid var(--brand); border-radius: var(--radius-xs); }
+.report-body { margin: 0 16px 16px; padding: 12px; max-height: 380px; overflow: auto; font-size: 12px; line-height: 1.7; white-space: pre-wrap; color: var(--text-secondary); background: var(--bg-muted); border-radius: var(--radius-sm); }
+.report-more { padding: 0 16px 14px; font-size: 12px; color: var(--text-tertiary); }
+.report-past { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.sample-notice { margin: 0; padding: 8px 16px; font-size: 12px; line-height: 1.7; color: #f59e0b; background: rgba(245,158,11,0.08); border-bottom: 1px solid var(--border); }
+.reason-cell { max-width: 260px; font-size: 12px; line-height: 1.5; }
+.order-reason { color: var(--text-secondary); }
+.order-rule { color: var(--text-tertiary); font-size: 11px; }
+.muted { color: var(--text-tertiary); }
 .spark polyline.up-text { stroke: #ef4444; }
 .spark polyline.down-text { stroke: #10b981; }
 .spark-empty { color: var(--text-tertiary); font-size: 12px; }

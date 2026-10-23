@@ -547,6 +547,21 @@ async function init() {
     CREATE INDEX IF NOT EXISTS idx_paper_order_competition ON paper_orders(competition_id);
     CREATE INDEX IF NOT EXISTS idx_paper_order_status ON paper_orders(status);
 
+    -- 决策理由：没有它「可复现、可学习」都是空话
+    ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reason TEXT;
+    ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS rule_hit VARCHAR(200);
+
+    CREATE TABLE IF NOT EXISTS paper_weekly_reports (
+      id SERIAL PRIMARY KEY,
+      competition_id INTEGER REFERENCES paper_competitions(id) NOT NULL,
+      week_start DATE NOT NULL,
+      week_end DATE NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_paper_weekly_comp_week
+      ON paper_weekly_reports(competition_id, week_end);
+
     CREATE TABLE IF NOT EXISTS paper_nav_snapshots (
       id SERIAL PRIMARY KEY,
       account_id INTEGER REFERENCES paper_accounts(id) NOT NULL,

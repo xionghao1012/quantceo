@@ -99,7 +99,16 @@ export async function runAgent(accountId: number): Promise<AgentRunResult> {
   }
 
   // 解析 LLM 决策并执行交易
-  const trades = await executeAgentDecision(accountId, decision, model)
+  const candidateReasons: Record<string, string> = {}
+  for (const c of marketData.topFlow) candidateReasons[c.code] = c.reason
+  const decisionReason = (() => {
+    try {
+      const cleaned = decision.replace(/<think[\s\S]*?<\/think>/gi, '')
+      const a = cleaned.indexOf('{'), b = cleaned.lastIndexOf('}')
+      return a >= 0 && b > a ? String(JSON.parse(cleaned.slice(a, b + 1))?.reason || '') : ''
+    } catch { return '' }
+  })()
+  const trades = await executeAgentDecision(accountId, decision, model, candidateReasons, decisionReason)
 
   return { agentId: account.agentId, agentName: account.agentName, model, success: true, decision, trades }
 }
@@ -235,6 +244,10 @@ async function executeAgentDecision(
   accountId: number,
   decision: string,
   model: string,
+  /** 候选股代码 → 入选理由（写进订单，页面上能回答「为什么买这只」） */
+  candidateReasons: Record<string, string> = {},
+  /** 模型给出的本次决策理由 */
+  decisionReason = '',
 ): Promise<AgentRunResult['trades']> {
   const trades: AgentRunResult['trades'] = []
 
@@ -275,7 +288,7 @@ async function executeAgentDecision(
     }
 
     // 下单
-    const result = await submitOrder(accountId, trade.direction, trade.code, trade.name || trade.code, trade.shares, price)
+    const result = await submitOrder(accountId, trade.direction, trade.code, trade.name || trade.code, trade.shares, price, decisionReason, candidateReasons[trade.code])
     const orderResult = result.ok ? 'FILLED(PENDING)' : `REJECTED:${result.error}`
     trades.push({ direction: trade.direction, code: trade.code, shares: trade.shares, result: orderResult })
     console.log(`[Agent ${model}] ${trade.direction} ${trade.code} x${trade.shares} @${price} → ${orderResult}`)

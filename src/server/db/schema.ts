@@ -639,12 +639,28 @@ export const paperOrders = pgTable('paper_orders', {
   filledPrice: decimal('filled_price', { precision: 12, scale: 4 }),
   status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING / FILLED / REJECTED / CANCELLED
   rejectReason: text('reject_reason'),
+  /** 模型给的决策理由（为什么买/卖） */
+  reason: text('reason'),
+  /** 触发的规则证据（候选股为什么入选，如「动量 97，站上 MA20」） */
+  ruleHit: varchar('rule_hit', { length: 200 }),
   filledAt: timestamp('filled_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   accountIdx: index('idx_paper_order_account').on(table.accountId),
   competitionIdx: index('idx_paper_order_competition').on(table.competitionId),
   statusIdx: index('idx_paper_order_status').on(table.status),
+}))
+
+export const paperWeeklyReports = pgTable('paper_weekly_reports', {
+  id: serial('id').primaryKey(),
+  competitionId: integer('competition_id').references(() => paperCompetitions.id).notNull(),
+  weekStart: date('week_start').notNull(),
+  weekEnd: date('week_end').notNull(),
+  /** markdown 正文，可直接复制到公众号/小红书 */
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  weekIdx: unique('idx_paper_weekly_comp_week').on(table.competitionId, table.weekEnd),
 }))
 
 export const paperNavSnapshots = pgTable('paper_nav_snapshots', {

@@ -14,6 +14,7 @@ import {
 } from '../services/paperTradingEngine.js'
 import { runAllAgents, runAgent } from '../services/paperTradingAgent.js'
 import { strategyCatalog } from '../services/paperStrategies.js'
+import { generateWeeklyReport, listWeeklyReports } from '../services/paperWeeklyReport.js'
 import { getOrFetchKlines } from '../data/cache.js'
 import { runBacktest } from '../backtest/index.js'
 import type { BacktestResult } from '../../shared/types.js'
@@ -110,6 +111,21 @@ router.get('/competitions/:id/ranking', async (req, res) => {
       navSeries: (series.get(r.accountId) || []).slice(-30),
     })),
   })
+})
+
+// 周报：最新几期（markdown，可直接复制发公众号）
+router.get('/competitions/:id/reports', async (req, res) => {
+  const id = parseInt(req.params.id)
+  const limit = Math.min(Number(req.query.limit) || 4, 12)
+  const reports = await listWeeklyReports(id, limit)
+  res.json(reports)
+})
+
+// 手动生成一期周报（管理员；cron 每周五也会自动生成）
+router.post('/admin/reports/generate', requireAdmin, async (req, res) => {
+  const report = await generateWeeklyReport({ competitionId: req.body?.competitionId, weekEnd: req.body?.weekEnd })
+  if (!report) return res.status(404).json({ error: '没有进行中的比赛' })
+  res.json(report)
 })
 
 // ----------------------------------------------------------
