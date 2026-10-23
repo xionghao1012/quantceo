@@ -16,13 +16,26 @@ import {
 import { eq, and, gte, sql, desc } from 'drizzle-orm'
 import { getRealtimeMoneyFlow } from './moneyFlowService.js'
 
-// 获取价格：先 Redis/Eastmoney，失败则查 DB
+// 获取价格：实时资金流 → 资金流表 → K 线最新收盘（最后兜底）
 async function getPrice(code: string): Promise<number | null> {
   try {
     const rt = await getRealtimeMoneyFlow(code)
     if (rt && rt.close > 0) return Number(rt.close)
   } catch { /* fall through */ }
-  return getPriceFromDB(code)
+  const fromFlow = await getPriceFromDB(code)
+  if (fromFlow && fromFlow > 0) return fromFlow
+  // 兜底必须查 K 线：money_flow_realtime 生产是空表（0 行），
+  // 只靠它会让所有持仓估值为 0 —— 比赛页面因此显示 -59%~-82% 的假亏损。
+  // K 线是全站价格的权威来源，也一定有数据。
+  try {
+    const r = await db.execute(sql`
+      SELECT close FROM klines WHERE code = ${code} ORDER BY date DESC LIMIT 1
+    `) as any
+    const v = Number(r?.rows?.[0]?.close)
+    return Number.isFinite(v) && v > 0 ? v : null
+  } catch {
+    return null
+  }
 }
 
 // 撮合后快照时直接查 DB（绕缓存）
@@ -397,12 +410,16 @@ export async function getAccountPortfolio(accountId: number) {
     .where(eq(paperPositions.accountId, accountId))
 
   const positionsWithValue = await Promise.all(positions.map(async (pos) => {
-    const currentPrice = (await getPrice(pos.code)) ?? 0
+    const quoted = await getPrice(pos.code)
+    // 取不到价格时按成本估值，并把 priceStale 标出来。
+    // 之前 `?? 0` 会把「没行情」显示成「亏光」，比赛排行榜直接变成假数据。
+    const currentPrice = quoted ?? Number(pos.avgCost)
     const value = currentPrice * pos.shares
     const cost = Number(pos.avgCost) * pos.shares
     return {
       ...pos,
       currentPrice,
+      priceStale: quoted === null,
       value,
       pnl: value - cost,
       pnlPct: cost > 0 ? ((value - cost) / cost) * 100 : 0,
