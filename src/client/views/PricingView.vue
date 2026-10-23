@@ -359,7 +359,7 @@ const currentPlan = ref('free')
 
 const FEATURE_NAME_MAP: Record<string, string> = {
   'ai-discover': 'AI 策略发现',
-  'ai-predict': 'AI 预测',
+  'ai-predict': 'AI 技术面解读',
   'strategy-optimize': '策略优化',
   'risk-management': '风险管理',
   'trade-journal': '交易日志',
@@ -480,7 +480,7 @@ const comparisonRows = [
   { label: '高级选股 Pro', free: false, pro: true, premium: true },
   { label: '因子回测', free: false, pro: true, premium: true, tip: 'factor' },
   { label: 'AI 策略发现', free: false, pro: true, premium: true, tip: 'ai-discover' },
-  { label: 'AI 预测', free: false, pro: true, premium: true, tip: 'ai-predict' },
+  { label: 'AI 技术面解读', free: false, pro: true, premium: true, tip: 'ai-predict' },
   { label: '策略优化', free: false, pro: true, premium: true },
   { label: '风险管理', free: false, pro: true, premium: true, tip: 'var' },
   { label: '仓位计算', free: false, pro: true, premium: true },

@@ -889,18 +889,19 @@ export function startScheduler() {
         name: p.stockName || p.stockCode,
         direction: p.direction === 'up' ? '📈' : p.direction === 'down' ? '📉' : '➡️',
         strength: Math.round(p.confidence / 20),
-        strategyName: `AI预测: ${p.direction === 'up' ? '看涨' : p.direction === 'down' ? '看跌' : '震荡'} 置信${p.confidence}%`,
+        // 不再在推送里带「置信度」：实测命中率低于无脑基准，写 75% 置信是误导
+        strategyName: `AI 解读: ${p.direction === 'up' ? '偏多' : p.direction === 'down' ? '偏空' : '震荡'}`,
         price: p.targetPrice ? String(Number(p.targetPrice).toFixed(2)) : undefined,
       }))
 
-      let text = `🤖 AI预测 ${today}\n`
+      let text = `🤖 AI 技术面解读 ${today}\n`
       for (const p of preds) {
-        const dir = p.direction === 'up' ? '📈看涨' : p.direction === 'down' ? '📉看跌' : '➡️震荡'
-        text += `\n${p.stockCode} ${p.stockName || p.stockCode}: ${dir} 置信${p.confidence}%`
+        const dir = p.direction === 'up' ? '📈偏多' : p.direction === 'down' ? '📉偏空' : '➡️震荡'
+        text += `\n${p.stockCode} ${p.stockName || p.stockCode}: ${dir}`
         if (p.targetPrice) text += ` 目标${Number(p.targetPrice).toFixed(2)}`
         if (p.stopLoss) text += ` 止损${Number(p.stopLoss).toFixed(2)}`
       }
-      text += '\n\n⚠️ 不构成投资建议'
+      text += '\n\n⚠️ 技术面解读，非买卖建议'
 
       pro.dispatchPush && await pro.dispatchPush({ type: 'dailyDigest', signals, digestText: text })
       console.log(`[Scheduler] Pushed AI predictions to ${preds.length} stocks`)
