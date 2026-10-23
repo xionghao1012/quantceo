@@ -56,7 +56,7 @@ async function toggleSub(strategyId: string) {
 
 // 周报（markdown，可直接复制发公众号）
 const reports = ref<any[]>([])
-const copied = ref(false)
+const copied = ref('')  // '' | 'md' | 'plain'
 
 async function loadReports(compId: number) {
   try {
@@ -65,11 +65,11 @@ async function loadReports(compId: number) {
   } catch {}
 }
 
-async function copyReport(text: string) {
+async function copyReport(text: string, kind: 'md' | 'plain' = 'md') {
   try {
     await navigator.clipboard.writeText(text)
-    copied.value = true
-    setTimeout(() => { copied.value = false }, 2000)
+    copied.value = kind
+    setTimeout(() => { copied.value = '' }, 2000)
   } catch {}
 }
 
@@ -490,16 +490,24 @@ function navChartOption(history: any[]) {
       <template v-else>
         <div class="report-head">
           <span class="report-title">{{ reports[0].weekStart }} ~ {{ reports[0].weekEnd }}</span>
-          <button class="report-copy" @click="copyReport(reports[0].content)">
-            {{ copied ? '已复制 ✓' : '复制 markdown' }}
-          </button>
+          <div class="report-actions">
+            <button class="report-copy" @click="copyReport(reports[0].plainContent, 'plain')">
+              {{ copied === 'plain' ? '已复制 ✓' : '复制纯文本（公众号）' }}
+            </button>
+            <button class="report-copy ghost" @click="copyReport(reports[0].content, 'md')">
+              {{ copied === 'md' ? '已复制 ✓' : '复制 markdown' }}
+            </button>
+          </div>
         </div>
+        <p class="report-tip">
+          发布清单：复制纯文本 → 贴进公众号 → 配一张净值走势截图 → 标题用「本周 AI 策略擂台：谁领先、谁回撤最大」
+        </p>
         <pre class="report-body">{{ reports[0].content }}</pre>
         <details v-if="reports.length > 1" class="report-more">
           <summary>往期（{{ reports.length - 1 }}）</summary>
           <div v-for="r in reports.slice(1)" :key="r.id" class="report-past">
             <span>{{ r.weekStart }} ~ {{ r.weekEnd }}</span>
-            <button class="report-copy" @click="copyReport(r.content)">复制</button>
+            <button class="report-copy" @click="copyReport(r.plainContent, 'plain')">复制纯文本</button>
           </div>
         </details>
       </template>
@@ -758,6 +766,9 @@ function navChartOption(history: any[]) {
 .report-empty { padding: 16px; font-size: 12px; line-height: 1.8; color: var(--text-tertiary); }
 .report-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; }
 .report-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.report-actions { display: flex; gap: 8px; }
+.report-copy.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
+.report-tip { margin: 0 16px 8px; font-size: 11px; line-height: 1.6; color: var(--text-tertiary); }
 .report-copy { font-size: 12px; padding: 4px 10px; cursor: pointer; background: var(--brand-glow); color: var(--brand); border: 1px solid var(--brand); border-radius: var(--radius-xs); }
 .report-body { margin: 0 16px 16px; padding: 12px; max-height: 380px; overflow: auto; font-size: 12px; line-height: 1.7; white-space: pre-wrap; color: var(--text-secondary); background: var(--bg-muted); border-radius: var(--radius-sm); }
 .report-more { padding: 0 16px 14px; font-size: 12px; color: var(--text-tertiary); }

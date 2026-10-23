@@ -665,8 +665,10 @@ export const paperWeeklyReports = pgTable('paper_weekly_reports', {
   competitionId: integer('competition_id').references(() => paperCompetitions.id).notNull(),
   weekStart: date('week_start').notNull(),
   weekEnd: date('week_end').notNull(),
-  /** markdown 正文，可直接复制到公众号/小红书 */
+  /** markdown 正文 */
   content: text('content').notNull(),
+  /** 纯文本版：公众号编辑器不认 markdown，直接粘贴用这个 */
+  plainContent: text('plain_content').notNull().default(''),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   weekIdx: unique('idx_paper_weekly_comp_week').on(table.competitionId, table.weekEnd),

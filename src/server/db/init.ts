@@ -566,8 +566,10 @@ async function init() {
       week_start DATE NOT NULL,
       week_end DATE NOT NULL,
       content TEXT NOT NULL,
+      plain_content TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMP DEFAULT NOW() NOT NULL
     );
+    ALTER TABLE paper_weekly_reports ADD COLUMN IF NOT EXISTS plain_content TEXT NOT NULL DEFAULT '';
     CREATE UNIQUE INDEX IF NOT EXISTS idx_paper_weekly_comp_week
       ON paper_weekly_reports(competition_id, week_end);
 
