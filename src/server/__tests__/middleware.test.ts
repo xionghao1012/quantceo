@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Request, Response, NextFunction } from 'express'
 
 describe('middleware/auth', () => {
@@ -148,36 +148,53 @@ describe('middleware/errors', () => {
 })
 
 describe('middleware/requireInternal', () => {
-  it('allows localhost by default', async () => {
+  const KEY = 'test-internal-key-32-chars-long!!'
+  const originalKey = process.env.INTERNAL_API_KEY
+
+  beforeEach(() => { process.env.INTERNAL_API_KEY = KEY })
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.INTERNAL_API_KEY
+    else process.env.INTERNAL_API_KEY = originalKey
+  })
+
+  const makeReq = (headers: Record<string, any> = {}, ip = '203.0.113.1') =>
+    ({ headers, ip, socket: { remoteAddress: ip } }) as unknown as Request
+  const makeRes = () => ({ status: vi.fn().mockReturnThis(), json: vi.fn() }) as unknown as Response
+
+  it('accepts the correct x-internal-key', async () => {
     const { requireInternal } = await import('../middleware/requireInternal.js')
-    const req = { ip: '127.0.0.1', socket: { remoteAddress: '' } } as unknown as Request
     const next = vi.fn() as NextFunction
-    requireInternal(req, {} as Response, next)
+    requireInternal(makeReq({ 'x-internal-key': KEY }), makeRes(), next)
     expect(next).toHaveBeenCalled()
   })
 
-  it('allows docker subnet 172.x', async () => {
+  it('rejects a wrong key', async () => {
     const { requireInternal } = await import('../middleware/requireInternal.js')
-    const req = { ip: '172.17.0.2', socket: { remoteAddress: '' } } as unknown as Request
-    const next = vi.fn() as NextFunction
-    requireInternal(req, {} as Response, next)
-    expect(next).toHaveBeenCalled()
-  })
-
-  it('rejects external IP', async () => {
-    const { requireInternal } = await import('../middleware/requireInternal.js')
-    const req = { ip: '203.0.113.1', socket: { remoteAddress: '' } } as unknown as Request
-    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
-    requireInternal(req, res, vi.fn() as NextFunction)
+    const res = makeRes()
+    requireInternal(makeReq({ 'x-internal-key': 'wrong' }), res, vi.fn() as NextFunction)
     expect(res.status).toHaveBeenCalledWith(403)
   })
 
-  it('falls back to socket.remoteAddress when ip is missing', async () => {
+  it('rejects spoofed X-Forwarded-For 172.x without a key (CSO 7250f48c)', async () => {
     const { requireInternal } = await import('../middleware/requireInternal.js')
-    const req = { socket: { remoteAddress: '127.0.0.1' } } as unknown as Request
-    const next = vi.fn() as NextFunction
-    requireInternal(req, {} as Response, next)
-    expect(next).toHaveBeenCalled()
+    const res = makeRes()
+    requireInternal(makeReq({ 'x-forwarded-for': '172.16.0.1' }, '172.16.0.1'), res, vi.fn() as NextFunction)
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it('rejects loopback without a key (cloudflared connects over loopback)', async () => {
+    const { requireInternal } = await import('../middleware/requireInternal.js')
+    const res = makeRes()
+    requireInternal(makeReq({}, '127.0.0.1'), res, vi.fn() as NextFunction)
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it('fails closed when INTERNAL_API_KEY is not configured', async () => {
+    delete process.env.INTERNAL_API_KEY
+    const { requireInternal } = await import('../middleware/requireInternal.js')
+    const res = makeRes()
+    requireInternal(makeReq({ 'x-internal-key': 'anything' }), res, vi.fn() as NextFunction)
+    expect(res.status).toHaveBeenCalledWith(503)
   })
 })
 

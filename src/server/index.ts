@@ -34,9 +34,16 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   contentSecurityPolicy: false,
 }))
+// CORS 之前是 `origin: ... || true`（反射任意源）+ credentials: true。
+// CSO finding ee6292e7：没配 ALLOWED_ORIGINS 时任何站点都能读响应。
+// 现在 fail closed：只放行显式配置的源；不用 cookie 会话，所以关掉 credentials。
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || true,
-  credentials: true,
+  origin: allowedOrigins.length ? allowedOrigins : false,
+  credentials: false,
 }))
 app.use(compression({ threshold: 1024 }))
 
