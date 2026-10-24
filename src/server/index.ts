@@ -47,7 +47,17 @@ app.use(cors({
 }))
 app.use(compression({ threshold: 1024 }))
 
-app.use(express.json({ limit: '1mb' }))
+// webhook 验签需要原始字节（HMAC 对 body 做签名，JSON.parse 之后就还原不出来）。
+// 之前这里没有 verify 回调，req.rawBody 永远是 undefined，
+// 于是 subscription.ts 的 `if (rawBody && signature)` 永远不成立 —— 验签成了死代码。
+app.use(express.json({
+  limit: '1mb',
+  verify: (req: any, _res, buf) => {
+    if (typeof req.originalUrl === 'string' && req.originalUrl.includes('/webhook')) {
+      req.rawBody = buf
+    }
+  },
+}))
 app.use(express.urlencoded({ limit: '1mb', extended: true }))
 
 // Rate limiting
