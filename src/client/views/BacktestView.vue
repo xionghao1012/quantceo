@@ -8,6 +8,7 @@ import type { BacktestResult } from '@shared/types'
 import { useStockStore } from '../stores/stock'
 import TermTip from '../components/TermTip.vue'
 import { defaultBacktestRange } from '@shared/dateRange'
+import { track } from '../utils/track'
 
 const router = useRouter()
 const route = useRoute()
@@ -103,8 +104,10 @@ async function applyOptimizedParams(r: any) {
         initialCapital: capital.value, rules, strategyName: templateName,
       }),
     })
+    const t0 = Date.now()
     if (!res.ok) {
       const detail = await res.json().catch(() => ({}))
+      track('backtest_ran', { code: code.value, strategyId: strategyId.value, ok: false })
       const msg = detail?.error === 'No data'
         ? '这只股票在这个区间内没有 K 线数据，换一段区间或换一只股票'
         : (detail?.error || `请求失败 (${res.status})`)
@@ -198,13 +201,30 @@ async function run() {
     } else {
       body.strategyId = strategyId.value
     }
+    const t0 = Date.now()
     const res = await fetch('/api/backtest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!res.ok) throw new Error(`请求失败 (${res.status})`)
-    result.value = await res.json()
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}))
+      track('backtest_ran', { code: code.value, strategyId: strategyId.value, ok: false, error: detail?.error || res.status })
+      const msg = detail?.error === 'No data'
+        ? '这只股票在这个区间内没有 K 线数据，换一段区间或换一只股票'
+        : (detail?.error || `请求失败 (${res.status})`)
+      throw new Error(msg)
+    }
+    const data = await res.json()
+    result.value = data
+    track('backtest_ran', {
+      code: code.value,
+      strategyId: strategyId.value,
+      ok: true,
+      trades: data.trades?.length ?? 0,
+      ms: Date.now() - t0,
+      from: route.query.code ? 'screener' : 'direct',
+    })
   } catch (e: any) {
     error.value = e.message
   } finally {

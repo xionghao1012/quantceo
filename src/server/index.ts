@@ -110,6 +110,16 @@ try {
   console.warn('[CompositeAlert] Failed to start:', e.message)
 }
 
+// 预热筛选快照：首次现算约 6-9 秒（全市场 5300 只 × 近 180 天 K 线）。
+// 启动时自请求一次，让第一个真实用户不用等这段冷启动。
+setTimeout(() => {
+  fetch(`http://127.0.0.1:${process.env.PORT || 4001}/api/screener`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conditions: [{ field: 'price', operator: '>', value: 0 }] }),
+  }).catch(() => {})
+}, 5000)
+
 // Evaluate predictions on startup (Pro only)
 const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
 try {

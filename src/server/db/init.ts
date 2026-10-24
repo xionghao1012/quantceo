@@ -551,6 +551,17 @@ async function init() {
     ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reason TEXT;
     ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS rule_hit VARCHAR(200);
 
+    -- 埋点：只记「用户做了什么」，不记内容/身份信息
+    CREATE TABLE IF NOT EXISTS app_events (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      event VARCHAR(50) NOT NULL,
+      props JSONB NOT NULL DEFAULT '{}',
+      path VARCHAR(200),
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_app_events_event_time ON app_events(event, created_at);
+
     CREATE TABLE IF NOT EXISTS paper_strategy_subs (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) NOT NULL,

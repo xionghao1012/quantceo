@@ -160,28 +160,23 @@ router.post('/', async (req, res) => {
   // 180 天足够 MA60 / MACD(26) / RSI(14) 的预热。
   // 指标快照缓存：数据一天只变一次（18:40 指标任务），5 分钟 TTL 足够。
   // 第一次请求现算（~6s），之后每次筛选都是内存过滤（~100ms）。
-  // key 必须带库名：dev 与 prod 共用同一个 Redis，否则会互相喂错数据
+  // key 必须带库名：dev 与 prod 共用同一个 Redis，否则会互相喂错数据。
+  // 测试环境禁用：否则不同测试文件会通过共享 Redis 串数据（已实际踩到）
+  const useSnapCache = process.env.NODE_ENV !== 'test'
   const snapKey = `screener:snapshot:v1:${process.env.PG_DB || 'default'}`
-  const cachedSnap = await cacheGetJson(snapKey)
+  const cachedSnap = useSnapCache ? await cacheGetJson(snapKey) : null
   if (cachedSnap) {
     try {
       const { at, rows } = JSON.parse(cachedSnap)
       // 快照里带上生成时间，超过 5 分钟就当没有（Redis TTL 之外的兜底）
       // 形状校验：老版本快照没有 latest/prev，直接复用会让过滤抛错
       const okShape = Array.isArray(rows) && (!rows.length || rows[0].latest !== undefined)
-      if (Date.now() - at < 5 * 60 * 1000 && okShape) {
+      if (Date.now() - at < 30 * 60 * 1000 && okShape) {
         const matched = rows.filter(r => matchesConditions(r, conditions, moneyFlowConditions))
         return res.json(respondWith(matched.map(toPublic), req.body))
       }
     } catch { /* 快照损坏就当没有 */ }
   }
-
-  // 最近交易日往前 10 天：停牌/退市的股票不参与（价格是陈的）
-  const lastDateRes = await db.execute(sql`SELECT max(date)::text AS d FROM klines`) as any
-  const marketLastDate = lastDateRes?.rows?.[0]?.d || ''
-  const marketLastDate10 = marketLastDate
-    ? new Date(new Date(marketLastDate + 'T00:00:00Z').getTime() - 10 * 86400000).toISOString().slice(0, 10)
-    : ''
 
   const results: any[] = []
   const BATCH = 200
@@ -222,10 +217,13 @@ router.post('/', async (req, res) => {
         .orderBy(klines.code, klines.date)
 
       const byCode: Record<string, any[]> = {}
+      let batchMaxDate = ''
       for (const row of klineRows) {
         if (!byCode[row.code]) byCode[row.code] = []
+        const rowDate = typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().slice(0, 10)
+        if (rowDate > batchMaxDate) batchMaxDate = rowDate
         byCode[row.code].push({
-          date: typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().slice(0, 10),
+          date: rowDate,
           open: Number(row.open), high: Number(row.high),
           low: Number(row.low), close: Number(row.close),
           volume: row.volume, amount: Number(row.amount),
@@ -278,9 +276,13 @@ router.post('/', async (req, res) => {
 
           // 不在计算阶段过滤：缓存的是「全市场原始快照」，过滤在每次请求时做，
           // 否则缓存会把第一个查询的结果当成所有人的结果（实测换条件仍返回 1994 只）
-          // 停牌太久（最近 10 天没有 K 线）不参与筛选：价格是陈的，指标没有意义
+          // 停牌太久（比本批最新日期老 10 天以上）不参与：价格是陈的，指标没有意义
           const lastDate = klines_data[klines_data.length - 1].date
-          if (lastDate && lastDate < marketLastDate10) return null
+          if (lastDate && batchMaxDate) {
+            const staleBefore = new Date(new Date(batchMaxDate + 'T00:00:00Z').getTime() - 10 * 86400000)
+              .toISOString().slice(0, 10)
+            if (lastDate < staleBefore) return null
+          }
 
           return {
             code,
@@ -309,7 +311,7 @@ router.post('/', async (req, res) => {
   }
 
   // 写缓存（失败不影响返回）
-  cacheSetJson(snapKey, JSON.stringify({ at: Date.now(), rows: universe }), 300).catch(() => {})
+  if (useSnapCache) cacheSetJson(snapKey, JSON.stringify({ at: Date.now(), rows: universe }), 1800).catch(() => {})
 
   const matched = universe.filter(r => matchesConditions(r, conditions, moneyFlowConditions))
   res.json(respondWith(matched.map(toPublic), req.body))

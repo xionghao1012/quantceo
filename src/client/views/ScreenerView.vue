@@ -5,6 +5,7 @@ import { useStockStore } from '../stores/stock'
 import DataFreshness from '../components/DataFreshness.vue'
 import TermTip from '../components/TermTip.vue'
 import QuickAlertModal from '../components/QuickAlertModal.vue'
+import { track } from '../utils/track'
 
 const router = useRouter()
 const store = useStockStore()
@@ -86,6 +87,7 @@ function fieldFor(f: string) {
 }
 
 async function runScreener() {
+  const t0 = Date.now()
   loading.value = true
   error.value = ''
   result.value = null
@@ -106,15 +108,24 @@ async function runScreener() {
       const err = await res.json()
       throw new Error(err.error || `请求失败 (${res.status})`)
     }
-    result.value = await res.json()
+    const data = await res.json()
+    result.value = data
+    track('screener_ran', {
+      conditions: conditions.value.length,
+      preset: activePreset.value || null,
+      total: data.total,
+      ms: Date.now() - t0,
+    })
   } catch (e: any) {
     error.value = e.message
+    track('screener_ran', { conditions: conditions.value.length, preset: activePreset.value || null, error: e.message })
   } finally {
     loading.value = false
   }
 }
 
 async function applyPreset(preset: typeof PRESETS[number]) {
+  track('preset_clicked', { preset: preset.key })
   activePreset.value = preset.key
   conditions.value = preset.conditions.map(c => ({ ...c }))
   moneyFlowConditions.value = []
@@ -333,7 +344,7 @@ function fmtVol(v: number) {
                 <td>
                   <div class="action-btns">
                     <button class="analyze-btn" @click="viewStock(s.code)">分析</button>
-                    <button class="analyze-btn ghost" @click="router.push({ path: '/backtest', query: { code: s.code } })">回测这只</button>
+                    <button class="analyze-btn ghost" @click="track('backtest_from_screener', { code: s.code, preset: activePreset || null }); router.push({ path: '/backtest', query: { code: s.code } })">回测这只</button>
                     <button class="alert-btn" title="设置告警" @click="quickAlertStock = { code: s.code, name: s.name }">⚡</button>
                   </div>
                 </td>

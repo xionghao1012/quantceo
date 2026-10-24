@@ -651,6 +651,18 @@ export const paperOrders = pgTable('paper_orders', {
   statusIdx: index('idx_paper_order_status').on(table.status),
 }))
 
+export const appEvents = pgTable('app_events', {
+  id: serial('id').primaryKey(),
+  /** 匿名访问为 null（埋点不要求登录） */
+  userId: integer('user_id').references(() => users.id),
+  event: varchar('event', { length: 50 }).notNull(),
+  props: jsonb('props').notNull().default({}),
+  path: varchar('path', { length: 200 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  eventTimeIdx: index('idx_app_events_event_time').on(table.event, table.createdAt),
+}))
+
 export const paperStrategySubs = pgTable('paper_strategy_subs', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id),
